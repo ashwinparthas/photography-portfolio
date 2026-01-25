@@ -32,6 +32,12 @@ export default function CategoryGallery({
   const [lightbox, setLightbox] = useState<LightboxState | null>(null);
   const [switchOpen, setSwitchOpen] = useState(false);
 
+  const preloadImage = (src: string) => {
+    if (typeof window === "undefined") return;
+    const img = new Image();
+    img.src = responsiveSrc(src);
+  };
+
   const switchItems = useMemo(
     () => CATEGORY_ITEMS.filter((item) => item.label !== currentCategory),
     [currentCategory]
@@ -70,6 +76,14 @@ export default function CategoryGallery({
       window.removeEventListener("keydown", handleKey);
     };
   }, [images.length, lightbox]);
+
+  useEffect(() => {
+    if (!lightbox) return;
+    const nextIndex = (lightbox.index + 1) % images.length;
+    const prevIndex = (lightbox.index - 1 + images.length) % images.length;
+    preloadImage(images[nextIndex].src);
+    preloadImage(images[prevIndex].src);
+  }, [images, lightbox]);
 
   const goNext = () => {
     setLightbox((current) =>
@@ -165,8 +179,12 @@ export default function CategoryGallery({
           </button>
           <figure>
             <img
-              src={withBasePath(images[lightbox.index].src)}
+              src={responsiveSrc(images[lightbox.index].src)}
+              srcSet={responsiveSrcSet(images[lightbox.index].src)}
+              sizes="(max-width: 900px) 96vw, 80vw"
               alt={images[lightbox.index].alt}
+              loading="eager"
+              decoding="async"
             />
           </figure>
         </div>

@@ -56,6 +56,12 @@ export default function Home() {
   const galleryRef = useRef<HTMLDivElement | null>(null);
   const scrollState = useRef({ target: 0, frame: 0 });
 
+  const preloadImage = (src: string) => {
+    if (typeof window === "undefined") return;
+    const img = new Image();
+    img.src = responsiveSrc(src);
+  };
+
   const categoryLinks = useMemo(
     () => [
       { label: "Landscape", href: "/landscape" },
@@ -105,6 +111,15 @@ export default function Home() {
       document.body.style.overflow = "";
       window.removeEventListener("keydown", handleKey);
     };
+  }, [lightbox]);
+
+  useEffect(() => {
+    if (!lightbox) return;
+    const nextIndex = (lightbox.index + 1) % lightbox.items.length;
+    const prevIndex =
+      (lightbox.index - 1 + lightbox.items.length) % lightbox.items.length;
+    preloadImage(lightbox.items[nextIndex].src);
+    preloadImage(lightbox.items[prevIndex].src);
   }, [lightbox]);
 
   useEffect(() => {
@@ -317,7 +332,11 @@ export default function Home() {
           </button>
           <figure>
             <img
-              src={withBasePath(lightbox.items[lightbox.index].src)}
+              src={responsiveSrc(lightbox.items[lightbox.index].src)}
+              srcSet={responsiveSrcSet(lightbox.items[lightbox.index].src)}
+              sizes="(max-width: 900px) 96vw, 80vw"
+              loading="eager"
+              decoding="async"
             />
           </figure>
         </div>
