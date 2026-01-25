@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { withBasePath } from "@/lib/basePath";
+import { responsiveSrc, responsiveSrcSet } from "@/lib/responsiveImage";
 
 type Photo = {
   title: string;
@@ -268,7 +269,13 @@ export default function Home() {
           <div className="gallery-track" ref={galleryRef}>
             {visiblePhotos.map((photo, index) => (
               <article className="gallery-card">
-                <img src={withBasePath(photo.src)} loading="lazy" />
+                <img
+                  src={responsiveSrc(photo.src)}
+                  srcSet={responsiveSrcSet(photo.src)}
+                  sizes="(max-width: 720px) 80vw, (max-width: 1200px) 50vw, 28vw"
+                  loading={index < 2 ? "eager" : "lazy"}
+                  decoding="async"
+                />
                 <button
                   type="button"
                   onClick={() => openLightbox(visiblePhotos, index)}

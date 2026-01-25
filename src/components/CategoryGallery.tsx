@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { withBasePath } from "@/lib/basePath";
+import { responsiveSrc, responsiveSrcSet } from "@/lib/responsiveImage";
 
 type ImageItem = {
   src: string;
@@ -119,7 +120,14 @@ export default function CategoryGallery({
       <div className="category-grid">
         {images.map((image, index) => (
           <article key={`${image.alt}-${index}`} className="category-tile">
-            <img src={withBasePath(image.src)} alt={image.alt} loading="eager" decoding="async" />
+            <img
+              src={responsiveSrc(image.src)}
+              srcSet={responsiveSrcSet(image.src)}
+              sizes="(max-width: 600px) 100vw, (max-width: 900px) 50vw, 25vw"
+              alt={image.alt}
+              loading={index < 2 ? "eager" : "lazy"}
+              decoding="async"
+            />
             <button
               type="button"
               aria-label={`Open ${image.alt}`}
@@ -156,7 +164,10 @@ export default function CategoryGallery({
             →
           </button>
           <figure>
-            <img src={withBasePath(images[lightbox.index].src)} alt={images[lightbox.index].alt} />
+            <img
+              src={withBasePath(images[lightbox.index].src)}
+              alt={images[lightbox.index].alt}
+            />
           </figure>
         </div>
       )}
