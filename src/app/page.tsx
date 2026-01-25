@@ -229,7 +229,10 @@ export default function Home() {
               </nav>
             )}
           </div>
-          <p className="intro-footer">Beauty in the silence.</p>
+          <p className="intro-footer">
+            “You don't take a photograph, you make it.”
+            <span className="quote-attribution">- Ansel Adams</span>
+          </p>
           <div className="intro-socials">
             <a
               className="social-link"
