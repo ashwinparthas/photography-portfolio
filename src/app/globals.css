@@ -471,10 +471,20 @@ img {
   background: rgba(255, 255, 255, 0.1);
 }
 
+.category-note {
+  margin: 22px clamp(20px, 3vw, 48px);
+  font-style: italic;
+  font-weight: 600;
+  text-align: center;
+  color: rgba(23, 22, 20, 0.6);
+  font-size: 0.92rem;
+  letter-spacing: 0.02em;
+}
+
 .category-grid {
   column-count: 4;
   column-gap: clamp(16px, 2.5vw, 28px);
-  padding: clamp(20px, 3vw, 48px);
+  padding: 0 clamp(20px, 3vw, 48px) clamp(20px, 3vw, 48px);
 }
 
 .category-tile {
@@ -686,9 +696,36 @@ img {
     right: 16px;
   }
 
+  .lightbox {
+    padding: 56px 12px 72px;
+  }
+
+  .lightbox figure {
+    max-width: 96vw;
+  }
+
+  .lightbox img {
+    max-height: calc(100svh - 160px);
+    object-fit: contain;
+  }
+
+  .lightbox-button {
+    top: auto;
+    bottom: 16px;
+    transform: none;
+  }
+
+  .lightbox-close {
+    top: 12px;
+    right: 12px;
+  }
+
   .lightbox-hd {
-    top: 16px;
-    left: 16px;
+    top: 12px;
+    left: 12px;
+  }
+
+  .lightbox-hd {
     height: 32px;
     padding: 0 12px;
     font-size: 0.58rem;
@@ -718,7 +755,7 @@ img {
   }
 
   .lightbox {
-    padding: 12px;
+    padding: 48px 12px 64px;
   }
 
   .lightbox figure {
@@ -727,7 +764,7 @@ img {
   }
 
   .lightbox img {
-    max-height: 82vh;
+    max-height: calc(100svh - 140px);
     object-fit: contain;
   }
 
@@ -740,6 +777,12 @@ img {
   .lightbox-close {
     top: 12px;
     right: 12px;
+  }
+
+  .lightbox-button {
+    top: auto;
+    bottom: 12px;
+    transform: none;
   }
 
   .lightbox-hd {

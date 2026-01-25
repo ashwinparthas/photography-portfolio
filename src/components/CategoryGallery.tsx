@@ -136,6 +136,9 @@ export default function CategoryGallery({
           )}
         </div>
       </header>
+      <p className="category-note">
+        Click on Each Image to Toggle Between Fullscreen HD Resolution(s).
+      </p>
       <div className="category-grid">
         {images.map((image, index) => (
           <article key={`${image.alt}-${index}`} className="category-tile">
