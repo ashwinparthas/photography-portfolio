@@ -5,34 +5,34 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { withBasePath } from "@/lib/basePath";
 
 type Photo = {
-  category: "Landscape" | "Nature" | "Street";
+  title: string;
   src: string;
   featured: boolean;
 };
 
 const photos: Photo[] = [
   {
-    category: "Landscape",
+    title: "Brooklyn Bridge",
     src: "/photos/Bridge.png",
     featured: true
   },
   {
-    category: "Nature",
+    title: "Monarch Butterfly",
     src: "/photos/Butterfly.png",
     featured: true
   },
   {
-    category: "Landscape",
+    title: "Dreamy Subway Station",
     src: "/photos/Dreamy_Subway.PNG",
     featured: true
   },
   {
-    category: "Street",
-    src: "/photos/SF_House.PNG",
+    title: "Big Sur Waves",
+    src: "/photos/Big_Sur.JPEG",
     featured: true
   },
   {
-    category: "Landscape",
+    title: "Wilhelmina Windmill",
     src: "/photos/Windmill.png",
     featured: true
   },
@@ -309,9 +309,6 @@ export default function Home() {
             <img
               src={withBasePath(lightbox.items[lightbox.index].src)}
             />
-            <span className="meta">
-              {lightbox.items[lightbox.index].category}
-            </span>
           </figure>
         </div>
       )}

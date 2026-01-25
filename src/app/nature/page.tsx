@@ -12,7 +12,6 @@ const images = [
   { src: "/photos/nature/_DSC0450.JPEG", alt: "DSC0450" },
   { src: "/photos/nature/_DSC0473.JPEG", alt: "DSC0473" },
   { src: "/photos/nature/_DSC0535.JPEG", alt: "DSC0535" },
-  { src: "/photos/nature/_DSC0539.JPEG", alt: "DSC0539" },
   { src: "/photos/nature/_DSC0543.JPEG", alt: "DSC0543" },
   { src: "/photos/nature/_DSC0550.JPEG", alt: "DSC0550" },
   { src: "/photos/nature/_DSC0609.JPEG", alt: "DSC0609" },

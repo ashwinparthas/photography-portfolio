@@ -2,6 +2,7 @@ import CategoryGallery from "@/components/CategoryGallery";
 
 const images = [
   { src: "/photos/street/Phone_Booth.JPG", alt: "Phone Booth" },
+  { src: "/photos/street/SF_House.PNG", alt: "SF House" },
   { src: "/photos/street/_DSC0354.PNG", alt: "DSC0354" },
   { src: "/photos/street/_DSC0502.PNG", alt: "DSC0502" },
   { src: "/photos/street/_DSC0514.PNG", alt: "DSC0514" },
