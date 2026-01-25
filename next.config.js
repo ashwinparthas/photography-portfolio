@@ -1,17 +1,13 @@
 /** @type {import('next').NextConfig} */
-const repo = 'photography-portfolio';
-const isProd = process.env.NODE_ENV === 'production';
-const basePath = isProd ? `/${repo}` : '';
-
-const nextConfig = {
+module.exports = {
   reactStrictMode: true,
   output: 'export',
-  basePath,
-  assetPrefix: basePath,
+  // Use a plain object so GitHub's configure-pages step can parse/inject safely
+  basePath: process.env.NODE_ENV === 'production' ? '/photography-portfolio' : '',
+  assetPrefix: process.env.NODE_ENV === 'production' ? '/photography-portfolio' : '',
   trailingSlash: true,
   images: { unoptimized: true },
-  env: { NEXT_PUBLIC_BASE_PATH: basePath }
+  env: {
+    NEXT_PUBLIC_BASE_PATH: process.env.NODE_ENV === 'production' ? '/photography-portfolio' : ''
+  }
 };
-
-module.exports = nextConfig;
-
