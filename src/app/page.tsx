@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { withBasePath } from "@/lib/basePath";
 
 type Photo = {
   category: "Landscape" | "Nature" | "Street";
@@ -12,27 +13,27 @@ type Photo = {
 const photos: Photo[] = [
   {
     category: "Landscape",
-    src: "/photos/Bridge.png",
+    src: withBasePath("/photos/Bridge.png"),
     featured: true
   },
   {
     category: "Nature",
-    src: "/photos/Butterfly.png",
+    src: withBasePath("/photos/Butterfly.png"),
     featured: true
   },
   {
     category: "Landscape",
-    src: "/photos/Dreamy_Subway.png",
+    src: withBasePath("/photos/Dreamy_Subway.PNG"),
     featured: true
   },
   {
     category: "Street",
-    src: "/photos/SF_House.png",
+    src: withBasePath("/photos/SF_House.PNG"),
     featured: true
   },
   {
     category: "Landscape",
-    src: "/photos/Windmill.png",
+    src: withBasePath("/photos/Windmill.png"),
     featured: true
   },
 ];
