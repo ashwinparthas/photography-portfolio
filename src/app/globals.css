@@ -668,6 +668,12 @@ img {
 }
 
 @media (max-width: 900px) and (orientation: landscape) {
+  .gallery,
+  .gallery-track,
+  .gallery-card {
+    height: 100svh;
+  }
+
   .intro {
     padding: 18px 20px;
     gap: 18px;
@@ -681,10 +687,6 @@ img {
   .intro-footer {
     font-size: 1rem;
     margin-top: 6px;
-  }
-
-  .gallery-card {
-    height: clamp(240px, 68vh, 420px);
   }
 
   .lightbox {
