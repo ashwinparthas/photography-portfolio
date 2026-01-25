@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { withBasePath } from "@/lib/basePath";
 
 type ImageItem = {
   src: string;
@@ -118,7 +119,7 @@ export default function CategoryGallery({
       <div className="category-grid">
         {images.map((image, index) => (
           <article key={`${image.alt}-${index}`} className="category-tile">
-            <img src={image.src} alt={image.alt} loading="eager" decoding="async" />
+            <img src={withBasePath(image.src)} alt={image.alt} loading="eager" decoding="async" />
             <button
               type="button"
               aria-label={`Open ${image.alt}`}
@@ -155,7 +156,7 @@ export default function CategoryGallery({
             →
           </button>
           <figure>
-            <img src={images[lightbox.index].src} alt={images[lightbox.index].alt} />
+            <img src={withBasePath(images[lightbox.index].src)} alt={images[lightbox.index].alt} />
           </figure>
         </div>
       )}

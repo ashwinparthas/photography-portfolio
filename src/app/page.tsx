@@ -13,27 +13,27 @@ type Photo = {
 const photos: Photo[] = [
   {
     category: "Landscape",
-    src: withBasePath("/photos/Bridge.png"),
+    src: "/photos/Bridge.png",
     featured: true
   },
   {
     category: "Nature",
-    src: withBasePath("/photos/Butterfly.png"),
+    src: "/photos/Butterfly.png",
     featured: true
   },
   {
     category: "Landscape",
-    src: withBasePath("/photos/Dreamy_Subway.PNG"),
+    src: "/photos/Dreamy_Subway.PNG",
     featured: true
   },
   {
     category: "Street",
-    src: withBasePath("/photos/SF_House.PNG"),
+    src: "/photos/SF_House.PNG",
     featured: true
   },
   {
     category: "Landscape",
-    src: withBasePath("/photos/Windmill.png"),
+    src: "/photos/Windmill.png",
     featured: true
   },
 ];
@@ -265,7 +265,7 @@ export default function Home() {
           <div className="gallery-track" ref={galleryRef}>
             {visiblePhotos.map((photo, index) => (
               <article className="gallery-card">
-                <img src={photo.src} loading="lazy" />
+                <img src={withBasePath(photo.src)} loading="lazy" />
                 <button
                   type="button"
                   onClick={() => openLightbox(visiblePhotos, index)}
@@ -307,7 +307,7 @@ export default function Home() {
           </button>
           <figure>
             <img
-              src={lightbox.items[lightbox.index].src}
+              src={withBasePath(lightbox.items[lightbox.index].src)}
             />
             <span className="meta">
               {lightbox.items[lightbox.index].category}
