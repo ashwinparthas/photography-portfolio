@@ -612,6 +612,26 @@ img {
   cursor: pointer;
 }
 
+.lightbox-hd {
+  position: absolute;
+  top: 28px;
+  left: 28px;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(10, 10, 10, 0.6);
+  color: var(--ink);
+  font-size: 0.62rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.lightbox-hd.is-active {
+  background: rgba(245, 242, 238, 0.12);
+  border-color: rgba(245, 242, 238, 0.4);
+}
+
 .lightbox-button {
   top: 50%;
   transform: translateY(-50%);
@@ -665,6 +685,14 @@ img {
   .lightbox-button.next {
     right: 16px;
   }
+
+  .lightbox-hd {
+    top: 16px;
+    left: 16px;
+    height: 32px;
+    padding: 0 12px;
+    font-size: 0.58rem;
+  }
 }
 
 @media (max-width: 900px) and (orientation: landscape) {
@@ -712,6 +740,14 @@ img {
   .lightbox-close {
     top: 12px;
     right: 12px;
+  }
+
+  .lightbox-hd {
+    top: 12px;
+    left: 12px;
+    height: 30px;
+    padding: 0 10px;
+    font-size: 0.54rem;
   }
 }
 

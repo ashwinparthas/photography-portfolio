@@ -31,6 +31,7 @@ export default function CategoryGallery({
 }: CategoryGalleryProps) {
   const [lightbox, setLightbox] = useState<LightboxState | null>(null);
   const [switchOpen, setSwitchOpen] = useState(false);
+  const [isHd, setIsHd] = useState(false);
 
   const preloadImage = (src: string) => {
     if (typeof window === "undefined") return;
@@ -55,6 +56,7 @@ export default function CategoryGallery({
         setLightbox(null);
       }
       if (event.key === "ArrowRight") {
+        setIsHd(false);
         setLightbox((current) =>
           current
             ? { index: (current.index + 1) % images.length }
@@ -62,6 +64,7 @@ export default function CategoryGallery({
         );
       }
       if (event.key === "ArrowLeft") {
+        setIsHd(false);
         setLightbox((current) =>
           current
             ? { index: (current.index - 1 + images.length) % images.length }
@@ -86,12 +89,14 @@ export default function CategoryGallery({
   }, [images, lightbox]);
 
   const goNext = () => {
+    setIsHd(false);
     setLightbox((current) =>
       current ? { index: (current.index + 1) % images.length } : current
     );
   };
 
   const goPrev = () => {
+    setIsHd(false);
     setLightbox((current) =>
       current
         ? { index: (current.index - 1 + images.length) % images.length }
@@ -145,7 +150,10 @@ export default function CategoryGallery({
             <button
               type="button"
               aria-label={`Open ${image.alt}`}
-              onClick={() => setLightbox({ index })}
+              onClick={() => {
+                setIsHd(false);
+                setLightbox({ index });
+              }}
             />
           </article>
         ))}
@@ -153,6 +161,14 @@ export default function CategoryGallery({
 
       {lightbox && (
         <div className="lightbox" role="dialog" aria-modal="true">
+          <button
+            className={`lightbox-hd${isHd ? " is-active" : ""}`}
+            type="button"
+            aria-pressed={isHd}
+            onClick={() => setIsHd((current) => !current)}
+          >
+            HD
+          </button>
           <button
             className="lightbox-close"
             type="button"
@@ -179,9 +195,15 @@ export default function CategoryGallery({
           </button>
           <figure>
             <img
-              src={responsiveSrc(images[lightbox.index].src)}
-              srcSet={responsiveSrcSet(images[lightbox.index].src)}
-              sizes="(max-width: 900px) 96vw, 80vw"
+              src={
+                isHd
+                  ? withBasePath(images[lightbox.index].src)
+                  : responsiveSrc(images[lightbox.index].src)
+              }
+              srcSet={
+                isHd ? undefined : responsiveSrcSet(images[lightbox.index].src)
+              }
+              sizes={isHd ? undefined : "(max-width: 900px) 96vw, 80vw"}
               alt={images[lightbox.index].alt}
               loading="eager"
               decoding="async"

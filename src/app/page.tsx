@@ -53,6 +53,7 @@ export default function Home() {
   const [categoriesOpen, setCategoriesOpen] = useState(false);
   const [panelFloating, setPanelFloating] = useState(false);
   const [lightbox, setLightbox] = useState<LightboxState | null>(null);
+  const [isHd, setIsHd] = useState(false);
   const galleryRef = useRef<HTMLDivElement | null>(null);
   const scrollState = useRef({ target: 0, frame: 0 });
 
@@ -84,6 +85,7 @@ export default function Home() {
         setLightbox(null);
       }
       if (event.key === "ArrowRight") {
+        setIsHd(false);
         setLightbox((current) =>
           current
             ? {
@@ -94,6 +96,7 @@ export default function Home() {
         );
       }
       if (event.key === "ArrowLeft") {
+        setIsHd(false);
         setLightbox((current) =>
           current
             ? {
@@ -190,10 +193,12 @@ export default function Home() {
   }, []);
 
   const openLightbox = (items: Photo[], index: number) => {
+    setIsHd(false);
     setLightbox({ items, index });
   };
 
   const goNext = () => {
+    setIsHd(false);
     setLightbox((current) =>
       current
         ? { ...current, index: (current.index + 1) % current.items.length }
@@ -202,6 +207,7 @@ export default function Home() {
   };
 
   const goPrev = () => {
+    setIsHd(false);
     setLightbox((current) =>
       current
         ? {
@@ -307,6 +313,14 @@ export default function Home() {
       {lightbox && (
         <div className="lightbox" role="dialog" aria-modal="true">
           <button
+            className={`lightbox-hd${isHd ? " is-active" : ""}`}
+            type="button"
+            aria-pressed={isHd}
+            onClick={() => setIsHd((current) => !current)}
+          >
+            HD
+          </button>
+          <button
             className="lightbox-close"
             type="button"
             aria-label="Close"
@@ -332,9 +346,17 @@ export default function Home() {
           </button>
           <figure>
             <img
-              src={responsiveSrc(lightbox.items[lightbox.index].src)}
-              srcSet={responsiveSrcSet(lightbox.items[lightbox.index].src)}
-              sizes="(max-width: 900px) 96vw, 80vw"
+              src={
+                isHd
+                  ? withBasePath(lightbox.items[lightbox.index].src)
+                  : responsiveSrc(lightbox.items[lightbox.index].src)
+              }
+              srcSet={
+                isHd
+                  ? undefined
+                  : responsiveSrcSet(lightbox.items[lightbox.index].src)
+              }
+              sizes={isHd ? undefined : "(max-width: 900px) 96vw, 80vw"}
               loading="eager"
               decoding="async"
             />
