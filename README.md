@@ -13,8 +13,3 @@ Stylish photography portfolio built with Next.js.
    ```bash
    npm run dev
    ```
-
-## Customize
-
-- Replace placeholder images in `public/photos/` with your own photos (keep the file names or update `src/app/page.tsx`).
-- Update the featured list and metadata in `src/app/page.tsx`.
