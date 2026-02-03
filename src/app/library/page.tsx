@@ -169,7 +169,7 @@ export default function LibraryPage() {
                 </button>
               );
             })()}
-            <p className="library-hint">Drag the globe and hover a dot to preview. Click to view.</p>
+            <p className="library-hint">Hover a dot to preview. Click to view.</p>
           </div>
         </section>
       </main>
