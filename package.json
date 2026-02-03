@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "images:w70": "python3 scripts/generate_w70.py"
   },
   "dependencies": {
     "next": "latest",

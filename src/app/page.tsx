@@ -4,43 +4,10 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { withBasePath } from "@/lib/basePath";
 import { responsiveSrc, responsiveSrcSet } from "@/lib/responsiveImage";
-
-type Photo = {
-  title: string;
-  src: string;
-  featured: boolean;
-};
-
-const photos: Photo[] = [
-  {
-    title: "Brooklyn Bridge",
-    src: "/photos/Bridge.png",
-    featured: true
-  },
-  {
-    title: "Monarch Butterfly",
-    src: "/photos/Butterfly.png",
-    featured: true
-  },
-  {
-    title: "Dreamy Subway Station",
-    src: "/photos/Dreamy_Subway.PNG",
-    featured: true
-  },
-  {
-    title: "Big Sur Waves",
-    src: "/photos/Big_Sur.JPEG",
-    featured: true
-  },
-  {
-    title: "Wilhelmina Windmill",
-    src: "/photos/Windmill.png",
-    featured: true
-  },
-];
+import { FEATURED_PHOTOS, type FeaturedPhoto } from "@/lib/photoData";
 
 type LightboxState = {
-  items: Photo[];
+  items: FeaturedPhoto[];
   index: number;
 };
 
@@ -72,7 +39,7 @@ export default function Home() {
     []
   );
 
-  const visiblePhotos = useMemo(() => photos, []);
+  const visiblePhotos = useMemo(() => FEATURED_PHOTOS, []);
 
   useEffect(() => {
     if (!lightbox) {
@@ -192,7 +159,7 @@ export default function Home() {
     };
   }, []);
 
-  const openLightbox = (items: Photo[], index: number) => {
+  const openLightbox = (items: FeaturedPhoto[], index: number) => {
     setIsHd(false);
     setLightbox({ items, index });
   };
