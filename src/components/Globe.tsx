@@ -366,6 +366,7 @@ export default function Globe({
     let lastHoverY = 0;
     let lastHoverTime = 0;
     let hoverActive = false;
+    let isTouchPointer = false;
 
     const updateRotation = (deltaX: number, deltaY: number) => {
       const rotateSpeed = 0.005;
@@ -379,6 +380,7 @@ export default function Globe({
     };
 
     const updatePointer = (event: PointerEvent) => {
+      isTouchPointer = event.pointerType === "touch";
       const rect = renderer.domElement.getBoundingClientRect();
       pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
       pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
@@ -418,6 +420,9 @@ export default function Globe({
     };
 
     const trySelectAtPointer = () => {
+      raycaster.params.Points = {
+        threshold: isTouchPointer ? 0.15 : 0.1
+      };
       raycaster.setFromCamera(pointer, camera);
       const hits = raycaster.intersectObject(dots);
       if (hits.length > 0) {
@@ -545,6 +550,9 @@ export default function Globe({
       }
 
       if (pointerActive) {
+        raycaster.params.Points = {
+          threshold: isTouchPointer ? 0.15 : 0.1
+        };
         raycaster.setFromCamera(pointer, camera);
         const hits = raycaster.intersectObject(dots);
         if (hits.length > 0) {
