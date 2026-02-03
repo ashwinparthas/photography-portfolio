@@ -417,9 +417,27 @@ export default function Globe({
       state.lastMove = now;
     };
 
-    const onPointerUp = () => {
+    const trySelectAtPointer = () => {
+      raycaster.setFromCamera(pointer, camera);
+      const hits = raycaster.intersectObject(dots);
+      if (hits.length > 0) {
+        const hit = hits[0];
+        const instanceId = hit.instanceId ?? null;
+        if (instanceId !== null) {
+          onSelectRef.current?.(instanceId);
+        }
+      }
+    };
+
+    const onPointerUp = (event?: PointerEvent) => {
       state.dragging = false;
       state.autoResumeAt = performance.now() + 900;
+      if (event) {
+        updatePointer(event);
+      }
+      if (!state.moved) {
+        trySelectAtPointer();
+      }
     };
 
     const onPointerLeave = () => {

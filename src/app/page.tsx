@@ -262,7 +262,7 @@ export default function Home() {
                   src={responsiveSrc(photo.src)}
                   srcSet={responsiveSrcSet(photo.src)}
                   sizes="(max-width: 720px) 80vw, (max-width: 1200px) 50vw, 28vw"
-                  loading={index < 2 ? "eager" : "lazy"}
+                  loading={index < 1 ? "eager" : "lazy"}
                   decoding="async"
                 />
                 <button

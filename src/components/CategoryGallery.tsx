@@ -192,7 +192,7 @@ export default function CategoryGallery({
                   srcSet={responsiveSrcSet(image.src)}
                   sizes="(max-width: 600px) 100vw, (max-width: 900px) 50vw, 25vw"
                   alt={image.alt}
-                  loading={index < 2 ? "eager" : "lazy"}
+                  loading={index < 1 ? "eager" : "lazy"}
                   decoding="async"
                 />
                 <button
