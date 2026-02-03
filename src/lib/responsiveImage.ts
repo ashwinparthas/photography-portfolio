@@ -1,6 +1,6 @@
 import { withBasePath } from "@/lib/basePath";
 
-const RESPONSIVE_SUFFIX = "w70";
+const RESPONSIVE_SUFFIX = "w60";
 
 const splitExt = (src: string) => {
   const lastSlash = src.lastIndexOf("/");

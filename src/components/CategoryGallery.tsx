@@ -22,7 +22,8 @@ type CategoryGalleryProps = {
 const CATEGORY_LINKS = [
   { label: "Landscape", href: "/landscape" },
   { label: "Nature", href: "/nature" },
-  { label: "Street", href: "/street" }
+  { label: "Street", href: "/street" },
+  { label: "Library", href: "/library" }
 ] as const;
 
 const SOCIAL_LINKS = {
@@ -123,6 +124,7 @@ export default function CategoryGallery({
           <Link href="/" className="intro-name">
             Ashwin Parthasarathy
           </Link>
+          <p className="intro-page-label">{currentCategory}</p>
           <div className="intro-categories">
             <button
               type="button"
@@ -182,9 +184,6 @@ export default function CategoryGallery({
           className="category-gallery"
           aria-label={`${currentCategory} gallery`}
         >
-          <div className="category-gallery-header">
-            <p className="category-label">{currentCategory}</p>
-          </div>
           <div className="category-grid">
             {images.map((image, index) => (
               <article key={`${image.alt}-${index}`} className="category-tile">

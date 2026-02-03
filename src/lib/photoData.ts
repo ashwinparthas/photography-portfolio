@@ -9,6 +9,12 @@ export type FeaturedPhoto = {
   featured: boolean;
 };
 
+export type AlbumItem = {
+  title: string;
+  src: string;
+  category: string;
+};
+
 
 export const FEATURED_PHOTOS: FeaturedPhoto[] = [
   {
@@ -97,4 +103,27 @@ export const STREET_IMAGES: ImageItem[] = [
   { src: "/photos/street/_DSC1084.JPG", alt: "DSC1084" },
   { src: "/photos/street/_DSC1107.JPG", alt: "DSC1107" },
   { src: "/photos/street/_DSC1117.JPG", alt: "DSC1117" }
+];
+
+export const ALL_ALBUMS: AlbumItem[] = [
+  ...FEATURED_PHOTOS.map((photo) => ({
+    title: photo.title,
+    src: photo.src,
+    category: "Featured"
+  })),
+  ...LANDSCAPE_IMAGES.map((photo) => ({
+    title: photo.alt,
+    src: photo.src,
+    category: "Landscape"
+  })),
+  ...NATURE_IMAGES.map((photo) => ({
+    title: photo.alt,
+    src: photo.src,
+    category: "Nature"
+  })),
+  ...STREET_IMAGES.map((photo) => ({
+    title: photo.alt,
+    src: photo.src,
+    category: "Street"
+  }))
 ];

@@ -34,7 +34,8 @@ export default function Home() {
     () => [
       { label: "Landscape", href: "/landscape" },
       { label: "Nature", href: "/nature" },
-      { label: "Street", href: "/street" }
+      { label: "Street", href: "/street" },
+      { label: "Library", href: "/library" }
     ],
     []
   );
@@ -256,7 +257,7 @@ export default function Home() {
         <section className="gallery">
           <div className="gallery-track" ref={galleryRef}>
             {visiblePhotos.map((photo, index) => (
-              <article className="gallery-card">
+              <article key={`${photo.src}-${index}`} className="gallery-card">
                 <img
                   src={responsiveSrc(photo.src)}
                   srcSet={responsiveSrcSet(photo.src)}
