@@ -421,7 +421,7 @@ export default function Globe({
 
     const trySelectAtPointer = () => {
       raycaster.params.Points = {
-        threshold: isTouchPointer ? 0.15 : 0.1
+        threshold: 0.2
       };
       raycaster.setFromCamera(pointer, camera);
       const hits = raycaster.intersectObject(dots);
@@ -551,7 +551,7 @@ export default function Globe({
 
       if (pointerActive) {
         raycaster.params.Points = {
-          threshold: isTouchPointer ? 0.15 : 0.1
+          threshold: 0.2
         };
         raycaster.setFromCamera(pointer, camera);
         const hits = raycaster.intersectObject(dots);
