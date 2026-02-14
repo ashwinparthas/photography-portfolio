@@ -1,7 +1,8 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import SubpageHeader from "@/components/SubpageHeader";
+import SubpageFooter from "@/components/SubpageFooter";
 import { withBasePath } from "@/lib/basePath";
 import { responsiveSrc, responsiveSrcSet } from "@/lib/responsiveImage";
 
@@ -14,31 +15,74 @@ type LightboxState = {
   index: number;
 };
 
+type RevealedSquare = {
+  x: number;
+  y: number;
+  id: string;
+  timeoutId: ReturnType<typeof setTimeout>;
+};
+
+type Rect = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
 type CategoryGalleryProps = {
   images: ImageItem[];
   currentCategory: "Landscape" | "Nature" | "Street";
 };
 
-const CATEGORY_LINKS = [
-  { label: "Landscape", href: "/landscape" },
-  { label: "Nature", href: "/nature" },
-  { label: "Street", href: "/street" },
-  { label: "Library", href: "/library" }
-] as const;
+const SUBPAGE_FOOTER_LINKS = [{ label: "Reveal It", href: "#reveal" }];
 
-const SOCIAL_LINKS = {
-  instagram: "https://www.instagram.com/ashwin.parthas",
-  linkedin: "https://www.linkedin.com/in/ashwin-parthas/"
-};
+const CURSOR_DOTS = Array.from({ length: 14 }, (_, index) => {
+  const angle = (index / 14) * Math.PI * 2;
+  const radius = 16;
+  return {
+    cx: 24 + Math.cos(angle) * radius,
+    cy: 24 + Math.sin(angle) * radius
+  };
+});
 
 export default function CategoryGallery({
   images,
   currentCategory
 }: CategoryGalleryProps) {
   const [lightbox, setLightbox] = useState<LightboxState | null>(null);
-  const [categoriesOpen, setCategoriesOpen] = useState(false);
-  const [panelFloating, setPanelFloating] = useState(false);
   const [isHd, setIsHd] = useState(false);
+  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
+  const [revealedSquares, setRevealedSquares] = useState<RevealedSquare[]>([]);
+  const [imageBounds, setImageBounds] = useState<Rect>({
+    x: 0,
+    y: 0,
+    width: 0,
+    height: 0
+  });
+  const [imageNaturalSize, setImageNaturalSize] = useState({ width: 1, height: 1 });
+  const [drawLayer, setDrawLayer] = useState<Rect>({
+    x: 0,
+    y: 0,
+    width: 0,
+    height: 0
+  });
+
+  const stageRef = useRef<HTMLDivElement | null>(null);
+  const mousePositionRef = useRef({ x: 0, y: 0 });
+  const isMouseDownRef = useRef(false);
+  const drawLayerRef = useRef<Rect>({ x: 0, y: 0, width: 0, height: 0 });
+  const lastRevealPosition = useRef({ x: 0, y: 0 });
+  const revealInterval = useRef<ReturnType<typeof setInterval> | null>(null);
+  const squareCounter = useRef(0);
+  const squareTimeoutsRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
+
+  const squareSize = 108;
+  const revealDistance = 25;
+  const disappearDelay = 1000;
+  const [selectedPhotoSrc, setSelectedPhotoSrc] = useState(
+    () => images[0]?.src ?? "/photos/Bridge.png"
+  );
+  const drawImage = useMemo(() => withBasePath(selectedPhotoSrc), [selectedPhotoSrc]);
 
   const preloadImage = (src: string) => {
     if (typeof window === "undefined") return;
@@ -46,15 +90,22 @@ export default function CategoryGallery({
     img.src = responsiveSrc(src);
   };
 
-  const categoryLinks = useMemo(() => CATEGORY_LINKS, []);
+  useEffect(() => {
+    squareTimeoutsRef.current.forEach((timeoutId) => clearTimeout(timeoutId));
+    squareTimeoutsRef.current.clear();
+    setSelectedPhotoSrc(
+      images[Math.floor(Math.random() * images.length)]?.src ??
+        "/photos/Bridge.png"
+    );
+    setRevealedSquares([]);
+    squareCounter.current = 0;
+  }, [currentCategory, images]);
 
   useEffect(() => {
-    const handleScroll = () => {
-      setPanelFloating(window.scrollY > 12);
+    return () => {
+      squareTimeoutsRef.current.forEach((timeoutId) => clearTimeout(timeoutId));
+      squareTimeoutsRef.current.clear();
     };
-    handleScroll();
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
   useEffect(() => {
@@ -101,6 +152,228 @@ export default function CategoryGallery({
     preloadImage(images[prevIndex].src);
   }, [images, lightbox]);
 
+  useEffect(() => {
+    const updateImageBounds = () => {
+      const stage = stageRef.current;
+      if (!stage) return;
+      const horizontalInset = 0;
+      const topInset = 0;
+      const bottomInset = 0;
+      setImageBounds({
+        x: horizontalInset,
+        y: topInset,
+        width: Math.max(0, stage.clientWidth - horizontalInset * 2),
+        height: Math.max(0, stage.clientHeight - topInset - bottomInset)
+      });
+    };
+
+    updateImageBounds();
+    window.addEventListener("resize", updateImageBounds);
+
+    return () => {
+      window.removeEventListener("resize", updateImageBounds);
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const setDimensions = (width: number, height: number) => {
+      if (cancelled) return;
+      setImageNaturalSize({
+        width: Math.max(1, width),
+        height: Math.max(1, height)
+      });
+    };
+
+    const loadDimensions = async () => {
+      try {
+        if (typeof createImageBitmap === "function") {
+          const response = await fetch(drawImage);
+          if (!response.ok) {
+            throw new Error("Failed to load image dimensions.");
+          }
+          const blob = await response.blob();
+          const bitmap = await createImageBitmap(blob);
+          setDimensions(bitmap.width, bitmap.height);
+          bitmap.close();
+          return;
+        }
+      } catch {
+        // Fallback below handles environments without createImageBitmap.
+      }
+
+      const img = new Image();
+      img.onload = () => {
+        setDimensions(img.naturalWidth, img.naturalHeight);
+      };
+      img.src = drawImage;
+    };
+
+    void loadDimensions();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [drawImage]);
+
+  useEffect(() => {
+    const fitScale = Math.min(
+      imageBounds.width / imageNaturalSize.width,
+      imageBounds.height / imageNaturalSize.height
+    );
+
+    if (!Number.isFinite(fitScale) || fitScale <= 0) {
+      setDrawLayer({ x: imageBounds.x, y: imageBounds.y, width: 0, height: 0 });
+      return;
+    }
+
+    const width = Math.round(imageNaturalSize.width * fitScale);
+    const height = Math.round(imageNaturalSize.height * fitScale);
+    const x = Math.round(imageBounds.x + (imageBounds.width - width) / 2);
+    const y = Math.round(imageBounds.y + (imageBounds.height - height) / 2);
+
+    setDrawLayer({
+      x,
+      y,
+      width,
+      height
+    });
+  }, [imageBounds, imageNaturalSize]);
+
+  useEffect(() => {
+    drawLayerRef.current = drawLayer;
+  }, [drawLayer]);
+
+  useEffect(() => {
+    const removeSquareById = (squareId: string) => {
+      setRevealedSquares((prev) =>
+        prev.filter((square) => square.id !== squareId)
+      );
+    };
+
+    const toStagePosition = (event: MouseEvent) => {
+      const stage = stageRef.current;
+      if (!stage) return null;
+      const rect = stage.getBoundingClientRect();
+      const width = stage.clientWidth;
+      const height = stage.clientHeight;
+      const x = event.clientX - rect.left - stage.clientLeft;
+      const y = event.clientY - rect.top - stage.clientTop;
+      const inside = x >= 0 && x <= width && y >= 0 && y <= height;
+      return {
+        x: Math.max(0, Math.min(x, width)),
+        y: Math.max(0, Math.min(y, height)),
+        inside
+      };
+    };
+
+    const revealSquareAtPosition = (x: number, y: number) => {
+      const centerX = x - squareSize / 2;
+      const centerY = y - squareSize / 2;
+
+      const imageLeft = drawLayerRef.current.x;
+      const imageTop = drawLayerRef.current.y;
+      const imageRight = drawLayerRef.current.x + drawLayerRef.current.width;
+      const imageBottom = drawLayerRef.current.y + drawLayerRef.current.height;
+
+      const squareLeft = centerX;
+      const squareTop = centerY;
+      const squareRight = centerX + squareSize;
+      const squareBottom = centerY + squareSize;
+
+      if (
+        drawLayerRef.current.width <= 0 ||
+        drawLayerRef.current.height <= 0 ||
+        squareRight <= imageLeft ||
+        squareLeft >= imageRight ||
+        squareBottom <= imageTop ||
+        squareTop >= imageBottom
+      ) {
+        return;
+      }
+
+      squareCounter.current += 1;
+      const squareId = `square-${squareCounter.current}`;
+      const timeoutId = setTimeout(() => {
+        squareTimeoutsRef.current.delete(timeoutId);
+        removeSquareById(squareId);
+      }, disappearDelay);
+      squareTimeoutsRef.current.add(timeoutId);
+
+      setRevealedSquares((prev) => [
+        ...prev,
+        { x: centerX, y: centerY, id: squareId, timeoutId }
+      ]);
+    };
+
+    const handleMouseMove = (event: MouseEvent) => {
+      const position = toStagePosition(event);
+      if (!position) return;
+      const newPosition = { x: position.x, y: position.y };
+      setMousePosition(newPosition);
+      mousePositionRef.current = newPosition;
+
+      if (isMouseDownRef.current && position.inside) {
+        const distance = Math.hypot(
+          newPosition.x - lastRevealPosition.current.x,
+          newPosition.y - lastRevealPosition.current.y
+        );
+
+        if (distance >= revealDistance) {
+          revealSquareAtPosition(newPosition.x, newPosition.y);
+          lastRevealPosition.current = newPosition;
+        }
+      }
+    };
+
+    const handleMouseDown = (event: MouseEvent) => {
+      const position = toStagePosition(event);
+      if (!position || !position.inside) return;
+      isMouseDownRef.current = true;
+      setMousePosition({ x: position.x, y: position.y });
+      mousePositionRef.current = { x: position.x, y: position.y };
+      revealSquareAtPosition(position.x, position.y);
+      lastRevealPosition.current = { x: position.x, y: position.y };
+
+      revealInterval.current = setInterval(() => {
+        revealSquareAtPosition(mousePositionRef.current.x, mousePositionRef.current.y);
+      }, 150);
+    };
+
+    const handleMouseUp = () => {
+      isMouseDownRef.current = false;
+      if (revealInterval.current) {
+        clearInterval(revealInterval.current);
+        revealInterval.current = null;
+      }
+    };
+
+    const handleClick = (event: MouseEvent) => {
+      const position = toStagePosition(event);
+      if (!position || !position.inside || isMouseDownRef.current) {
+        return;
+      }
+      revealSquareAtPosition(position.x, position.y);
+    };
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mousedown", handleMouseDown);
+    document.addEventListener("mouseup", handleMouseUp);
+    document.addEventListener("click", handleClick);
+
+    return () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mousedown", handleMouseDown);
+      document.removeEventListener("mouseup", handleMouseUp);
+      document.removeEventListener("click", handleClick);
+      if (revealInterval.current) {
+        clearInterval(revealInterval.current);
+        revealInterval.current = null;
+      }
+    };
+  }, []);
+
   const goNext = () => {
     setIsHd(false);
     setLightbox((current) =>
@@ -118,67 +391,9 @@ export default function CategoryGallery({
   };
 
   return (
-    <div className="site-shell category-shell">
-      <main className="main-grid">
-        <section className={`intro${panelFloating ? " is-floating" : ""}`}>
-          <Link href="/" className="intro-name">
-            Ashwin Parthasarathy
-          </Link>
-          <p className="intro-page-label">{currentCategory}</p>
-          <div className="intro-categories">
-            <button
-              type="button"
-              className="categories-toggle"
-              aria-expanded={categoriesOpen}
-              onClick={() => setCategoriesOpen((open) => !open)}
-            >
-              Collections
-            </button>
-            {categoriesOpen && (
-              <nav className="categories-menu" aria-label="Categories">
-                {categoryLinks.map((item) => (
-                  <Link
-                    key={item.label}
-                    href={item.href}
-                    className="categories-link"
-                    onClick={() => setCategoriesOpen(false)}
-                  >
-                    {item.label}
-                  </Link>
-                ))}
-              </nav>
-            )}
-          </div>
-          <div className="intro-socials">
-            <a
-              className="social-link"
-              href={SOCIAL_LINKS.instagram}
-              target="_blank"
-              rel="noreferrer"
-              aria-label="Instagram"
-            >
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path
-                  d="M16.75 3h-9.5A4.25 4.25 0 0 0 3 7.25v9.5A4.25 4.25 0 0 0 7.25 21h9.5A4.25 4.25 0 0 0 21 16.75v-9.5A4.25 4.25 0 0 0 16.75 3Zm2.75 13.75A2.75 2.75 0 0 1 16.75 19.5h-9.5A2.75 2.75 0 0 1 4.5 16.75v-9.5A2.75 2.75 0 0 1 7.25 4.5h9.5A2.75 2.75 0 0 1 19.5 7.25v9.5Z"
-                />
-                <path d="M12 7.25A4.75 4.75 0 1 0 16.75 12 4.75 4.75 0 0 0 12 7.25Zm0 8A3.25 3.25 0 1 1 15.25 12 3.26 3.26 0 0 1 12 15.25Z" />
-                <circle cx="17.2" cy="6.8" r="1.1" />
-              </svg>
-            </a>
-            <a
-              className="social-link"
-              href={SOCIAL_LINKS.linkedin}
-              target="_blank"
-              rel="noreferrer"
-              aria-label="LinkedIn"
-            >
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M6.94 8.5H4.1V20h2.84V8.5Zm.28-3.6a1.63 1.63 0 1 0-1.63 1.64 1.63 1.63 0 0 0 1.63-1.64Z" />
-                <path d="M19.9 13.22c0-3.24-1.72-4.75-4.02-4.75a3.48 3.48 0 0 0-3.13 1.73V8.5H9.99c.04 1.12 0 11.5 0 11.5h2.76v-6.43c0-.35.03-.7.12-.95a1.88 1.88 0 0 1 1.77-1.26c1.25 0 1.75.95 1.75 2.35V20h2.76Z" />
-              </svg>
-            </a>
-          </div>
-        </section>
+    <div className="artist-subpage-shell category-shell">
+      <main className="artist-subpage-main">
+        <SubpageHeader pageLabel={currentCategory} />
 
         <section
           className="category-gallery"
@@ -210,7 +425,76 @@ export default function CategoryGallery({
             <p className="empty-state">No photos in this category yet.</p>
           )}
         </section>
+
+        <div className="artist-header-rule category-gallery-rule" aria-hidden="true" />
+
+        <section
+          id="reveal"
+          className="artist-library-intro artist-reveal-intro category-reveal-intro"
+        >
+          <h2 className="artist-library-title">Reveal It</h2>
+        </section>
+
+        <section
+          className="category-brush-workbench category-workbench"
+          aria-label={`${currentCategory} paintbrush reveal`}
+        >
+          <div className="category-brush-stage category-brush-page" ref={stageRef}>
+            <p className="category-brush-instruction">Click and drag to reveal the image.</p>
+
+            {revealedSquares.map((square) => {
+              return (
+                <div
+                  key={square.id}
+                  className="category-brush-square"
+                  style={{
+                    left: square.x,
+                    top: square.y,
+                    width: squareSize,
+                    height: squareSize
+                  }}
+                >
+                  <img
+                    src={drawImage}
+                    alt=""
+                    aria-hidden="true"
+                    className="category-brush-square-image"
+                    draggable={false}
+                    style={{
+                      left: drawLayer.x - square.x,
+                      top: drawLayer.y - square.y,
+                      width: drawLayer.width,
+                      height: drawLayer.height
+                    }}
+                  />
+                </div>
+              );
+            })}
+
+            <div
+              className="category-brush-cursor"
+              style={{
+                left: mousePosition.x - 24,
+                top: mousePosition.y - 24
+              }}
+              aria-hidden="true"
+            >
+              <svg fill="none" preserveAspectRatio="none" viewBox="0 0 48 48">
+                {CURSOR_DOTS.map((dot, index) => (
+                  <circle
+                    key={`dot-${index}`}
+                    cx={dot.cx}
+                    cy={dot.cy}
+                    r="2.9"
+                    fill="#7ad8ff"
+                  />
+                ))}
+              </svg>
+            </div>
+          </div>
+        </section>
       </main>
+      <SubpageFooter links={SUBPAGE_FOOTER_LINKS} />
 
       {lightbox && (
         <div className="lightbox" role="dialog" aria-modal="true">

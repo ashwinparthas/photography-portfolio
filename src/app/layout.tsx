@@ -1,6 +1,10 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { Bodoni_Moda, Space_Grotesk, Montserrat } from "next/font/google";
+import {
+  Bodoni_Moda,
+  Space_Grotesk,
+  Montserrat
+} from "next/font/google";
 
 export const metadata: Metadata = {
   title: "Ashwin's Portfolio"

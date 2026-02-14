@@ -1,28 +1,47 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { withBasePath } from "@/lib/basePath";
+import { useEffect, useRef, useState } from "react";
+import CollectionsDropdown from "@/components/CollectionsDropdown";
+import FooterGradientShader from "@/components/FooterGradientShader";
+import LibraryCosmosSection from "@/components/LibraryCosmosSection";
+import SubpageFooter from "@/components/SubpageFooter";
+import VinylPlayerSection from "@/components/VinylPlayerSection";
 import { responsiveSrc, responsiveSrcSet } from "@/lib/responsiveImage";
-import { FEATURED_PHOTOS, type FeaturedPhoto } from "@/lib/photoData";
-
-type LightboxState = {
-  items: FeaturedPhoto[];
-  index: number;
-};
+import { FEATURED_PHOTOS } from "@/lib/photoData";
+import { withBasePath } from "@/lib/basePath";
 
 const SOCIAL_LINKS = {
   instagram: "https://www.instagram.com/ashwin.parthas",
   linkedin: "https://www.linkedin.com/in/ashwin-parthas/"
 };
 
+const CATEGORY_LINKS = [
+  { label: "Landscape", href: "/landscape" },
+  { label: "Nature", href: "/nature" },
+  { label: "Street", href: "/street" }
+];
+
+const HOME_FOOTER_LINKS = [
+  { label: "Library", href: "#library" },
+  { label: "Jukebox", href: "#jukebox" }
+];
+
+type HeroLightboxState = {
+  index: number;
+};
+
 export default function Home() {
-  const [categoriesOpen, setCategoriesOpen] = useState(false);
-  const [panelFloating, setPanelFloating] = useState(false);
-  const [lightbox, setLightbox] = useState<LightboxState | null>(null);
+  const heroWheelRef = useRef<HTMLDivElement | null>(null);
+  const scrollStateRef = useRef({
+    target: 0,
+    current: 0,
+    frame: 0,
+    lastTime: 0
+  });
+  const [heroLightbox, setHeroLightbox] = useState<HeroLightboxState | null>(
+    null
+  );
   const [isHd, setIsHd] = useState(false);
-  const galleryRef = useRef<HTMLDivElement | null>(null);
-  const scrollState = useRef({ target: 0, frame: 0 });
 
   const preloadImage = (src: string) => {
     if (typeof window === "undefined") return;
@@ -30,255 +49,246 @@ export default function Home() {
     img.src = responsiveSrc(src);
   };
 
-  const categoryLinks = useMemo(
-    () => [
-      { label: "Landscape", href: "/landscape" },
-      { label: "Nature", href: "/nature" },
-      { label: "Street", href: "/street" },
-      { label: "Library", href: "/library" }
-    ],
-    []
-  );
+  useEffect(() => {
+    const track = heroWheelRef.current;
+    if (!track) return;
 
-  const visiblePhotos = useMemo(() => FEATURED_PHOTOS, []);
+    scrollStateRef.current.target = track.scrollLeft;
+    scrollStateRef.current.current = track.scrollLeft;
+    scrollStateRef.current.lastTime = 0;
+
+    const toPixelDelta = (event: WheelEvent) => {
+      const dominantDelta =
+        Math.abs(event.deltaY) >= Math.abs(event.deltaX)
+          ? event.deltaY
+          : event.deltaX;
+
+      if (event.deltaMode === WheelEvent.DOM_DELTA_LINE) {
+        return dominantDelta * 16;
+      }
+
+      if (event.deltaMode === WheelEvent.DOM_DELTA_PAGE) {
+        return dominantDelta * window.innerHeight;
+      }
+
+      return dominantDelta;
+    };
+
+    const animate = (time: number) => {
+      const state = scrollStateRef.current;
+      const elapsed = state.lastTime ? time - state.lastTime : 16.7;
+      state.lastTime = time;
+
+      const smoothing = 1 - Math.exp(-elapsed / 120);
+      state.current += (state.target - state.current) * smoothing;
+      track.scrollLeft = state.current;
+
+      if (Math.abs(state.target - state.current) > 0.35) {
+        state.frame = requestAnimationFrame(animate);
+        return;
+      }
+
+      track.scrollLeft = state.target;
+      state.current = state.target;
+      state.frame = 0;
+      state.lastTime = 0;
+    };
+
+    const handleWheel = (event: WheelEvent) => {
+      if (track.scrollWidth <= track.clientWidth) return;
+
+      const maxScroll = track.scrollWidth - track.clientWidth;
+      const delta = toPixelDelta(event);
+
+      if (delta === 0) return;
+
+      const state = scrollStateRef.current;
+      const atStart = state.target <= 1 && track.scrollLeft <= 1;
+      const atEnd =
+        state.target >= maxScroll - 1 && track.scrollLeft >= maxScroll - 1;
+      if ((delta < 0 && atStart) || (delta > 0 && atEnd)) return;
+
+      event.preventDefault();
+
+      state.target += delta * 0.84;
+      state.target = Math.max(
+        0,
+        Math.min(state.target, maxScroll)
+      );
+
+      if (state.frame) return;
+      state.current = track.scrollLeft;
+      state.frame = requestAnimationFrame(animate);
+    };
+
+    const handleTrackScroll = () => {
+      const state = scrollStateRef.current;
+      if (state.frame) return;
+      state.target = track.scrollLeft;
+      state.current = track.scrollLeft;
+    };
+
+    track.addEventListener("wheel", handleWheel, { passive: false });
+    track.addEventListener("scroll", handleTrackScroll, { passive: true });
+
+    return () => {
+      track.removeEventListener("wheel", handleWheel);
+      track.removeEventListener("scroll", handleTrackScroll);
+      const state = scrollStateRef.current;
+      if (state.frame) cancelAnimationFrame(state.frame);
+      state.frame = 0;
+      state.lastTime = 0;
+    };
+  }, []);
 
   useEffect(() => {
-    if (!lightbox) {
+    if (!heroLightbox) {
       document.body.style.overflow = "";
       return;
     }
+
     document.body.style.overflow = "hidden";
     const handleKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        setLightbox(null);
+        setHeroLightbox(null);
       }
       if (event.key === "ArrowRight") {
         setIsHd(false);
-        setLightbox((current) =>
+        setHeroLightbox((current) =>
           current
-            ? {
-                ...current,
-                index: (current.index + 1) % current.items.length
-              }
+            ? { index: (current.index + 1) % FEATURED_PHOTOS.length }
             : current
         );
       }
       if (event.key === "ArrowLeft") {
         setIsHd(false);
-        setLightbox((current) =>
+        setHeroLightbox((current) =>
           current
             ? {
-                ...current,
                 index:
-                  (current.index - 1 + current.items.length) %
-                  current.items.length
+                  (current.index - 1 + FEATURED_PHOTOS.length) %
+                  FEATURED_PHOTOS.length
               }
             : current
         );
       }
     };
+
     window.addEventListener("keydown", handleKey);
     return () => {
       document.body.style.overflow = "";
       window.removeEventListener("keydown", handleKey);
     };
-  }, [lightbox]);
+  }, [heroLightbox]);
 
   useEffect(() => {
-    if (!lightbox) return;
-    const nextIndex = (lightbox.index + 1) % lightbox.items.length;
+    if (!heroLightbox) return;
+    const nextIndex = (heroLightbox.index + 1) % FEATURED_PHOTOS.length;
     const prevIndex =
-      (lightbox.index - 1 + lightbox.items.length) % lightbox.items.length;
-    preloadImage(lightbox.items[nextIndex].src);
-    preloadImage(lightbox.items[prevIndex].src);
-  }, [lightbox]);
-
-  useEffect(() => {
-    const track = galleryRef.current;
-    if (!track) {
-      return;
-    }
-
-    scrollState.current.target = track.scrollLeft;
-
-    const handleWheel = (event: WheelEvent) => {
-      if (track.scrollWidth <= track.clientWidth) {
-        return;
-      }
-
-      const delta =
-        Math.abs(event.deltaY) >= Math.abs(event.deltaX)
-          ? event.deltaY
-          : event.deltaX;
-
-      if (delta === 0) {
-        return;
-      }
-
-      event.preventDefault();
-      const scaled = delta * 0.7;
-      scrollState.current.target += scaled;
-      const maxScroll = track.scrollWidth - track.clientWidth;
-      scrollState.current.target = Math.max(
-        0,
-        Math.min(scrollState.current.target, maxScroll)
-      );
-
-      setPanelFloating(scrollState.current.target > 12);
-
-      if (scrollState.current.frame) {
-        return;
-      }
-
-      const step = () => {
-        const distance = scrollState.current.target - track.scrollLeft;
-        track.scrollLeft += distance * 0.18;
-        setPanelFloating(track.scrollLeft > 12);
-        if (Math.abs(distance) > 0.5) {
-          scrollState.current.frame = requestAnimationFrame(step);
-        } else {
-          scrollState.current.frame = 0;
-        }
-      };
-
-      scrollState.current.frame = requestAnimationFrame(step);
-    };
-
-    window.addEventListener("wheel", handleWheel, { passive: false });
-    const handleScroll = () => {
-      setPanelFloating(track.scrollLeft > 12);
-    };
-    handleScroll();
-    track.addEventListener("scroll", handleScroll, { passive: true });
-    return () => {
-      window.removeEventListener("wheel", handleWheel);
-      track.removeEventListener("scroll", handleScroll);
-      if (scrollState.current.frame) {
-        cancelAnimationFrame(scrollState.current.frame);
-        scrollState.current.frame = 0;
-      }
-    };
-  }, []);
-
-  const openLightbox = (items: FeaturedPhoto[], index: number) => {
-    setIsHd(false);
-    setLightbox({ items, index });
-  };
+      (heroLightbox.index - 1 + FEATURED_PHOTOS.length) %
+      FEATURED_PHOTOS.length;
+    preloadImage(FEATURED_PHOTOS[nextIndex].src);
+    preloadImage(FEATURED_PHOTOS[prevIndex].src);
+  }, [heroLightbox]);
 
   const goNext = () => {
     setIsHd(false);
-    setLightbox((current) =>
-      current
-        ? { ...current, index: (current.index + 1) % current.items.length }
-        : current
+    setHeroLightbox((current) =>
+      current ? { index: (current.index + 1) % FEATURED_PHOTOS.length } : current
     );
   };
 
   const goPrev = () => {
     setIsHd(false);
-    setLightbox((current) =>
+    setHeroLightbox((current) =>
       current
         ? {
-            ...current,
             index:
-              (current.index - 1 + current.items.length) %
-              current.items.length
+              (current.index - 1 + FEATURED_PHOTOS.length) %
+              FEATURED_PHOTOS.length
           }
         : current
     );
   };
 
   return (
-    <div className="site-shell">
-      <main className="main-grid">
-        <section className={`intro${panelFloating ? " is-floating" : ""}`}>
-          <h1 className="intro-name">
-            Ashwin Parthasarathy
-          </h1>
-          <div className="intro-categories">
-            <button
-              type="button"
-              className="categories-toggle"
-              aria-expanded={categoriesOpen}
-              onClick={() => setCategoriesOpen((open) => !open)}
-            >
-              Collections
-            </button>
-            {categoriesOpen && (
-              <nav className="categories-menu" aria-label="Categories">
-                {categoryLinks.map((item) => (
-                  <Link
-                    key={item.label}
-                    href={item.href}
-                    className="categories-link"
-                    onClick={() => setCategoriesOpen(false)}
-                  >
-                    {item.label}
-                  </Link>
-                ))}
-              </nav>
-            )}
-          </div>
-          <p className="intro-footer">
-            “You don't take a photograph, you make it.”
-            <span className="quote-attribution">- Ansel Adams</span>
-          </p>
-          <div className="intro-socials">
-            <a
-              className="social-link"
-              href={SOCIAL_LINKS.instagram}
-              target="_blank"
-              rel="noreferrer"
-              aria-label="Instagram"
-            >
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path
-                  d="M16.75 3h-9.5A4.25 4.25 0 0 0 3 7.25v9.5A4.25 4.25 0 0 0 7.25 21h9.5A4.25 4.25 0 0 0 21 16.75v-9.5A4.25 4.25 0 0 0 16.75 3Zm2.75 13.75A2.75 2.75 0 0 1 16.75 19.5h-9.5A2.75 2.75 0 0 1 4.5 16.75v-9.5A2.75 2.75 0 0 1 7.25 4.5h9.5A2.75 2.75 0 0 1 19.5 7.25v9.5Z"
-                />
-                <path d="M12 7.25A4.75 4.75 0 1 0 16.75 12 4.75 4.75 0 0 0 12 7.25Zm0 8A3.25 3.25 0 1 1 15.25 12 3.26 3.26 0 0 1 12 15.25Z" />
-                <circle cx="17.2" cy="6.8" r="1.1" />
-              </svg>
-            </a>
-            <a
-              className="social-link"
-              href={SOCIAL_LINKS.linkedin}
-              target="_blank"
-              rel="noreferrer"
-              aria-label="LinkedIn"
-            >
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M6.94 8.5H4.1V20h2.84V8.5Zm.28-3.6a1.63 1.63 0 1 0-1.63 1.64 1.63 1.63 0 0 0 1.63-1.64Z" />
-                <path d="M19.9 13.22c0-3.24-1.72-4.75-4.02-4.75a3.48 3.48 0 0 0-3.13 1.73V8.5H9.99c.04 1.12 0 11.5 0 11.5h2.76v-6.43c0-.35.03-.7.12-.95a1.88 1.88 0 0 1 1.77-1.26c1.25 0 1.75.95 1.75 2.35V20h2.76Z" />
-              </svg>
-            </a>
-          </div>
-        </section>
+    <div className="artist-home-shell">
+      <main className="artist-home-main">
+        <section className="artist-landing" id="top">
+          <header className="artist-header">
+            <div className="artist-header-gradient" aria-hidden="true">
+              <FooterGradientShader />
+            </div>
+            <h1 className="artist-wordmark">
+              Ashwin
+              <br />
+              Parthasarathy
+            </h1>
+            <p className="artist-origin">
+              2024 • Present
+              <br />
+              San Francisco, CA
+            </p>
+            <CollectionsDropdown className="artist-nav" links={CATEGORY_LINKS} />
+            <div className="artist-language">
+              <a href={SOCIAL_LINKS.instagram} target="_blank" rel="noreferrer">
+                Instagram
+              </a>
+              <a href={SOCIAL_LINKS.linkedin} target="_blank" rel="noreferrer">
+                LinkedIn
+              </a>
+            </div>
+          </header>
+          <div className="artist-header-rule" />
 
-        <section className="gallery">
-          <div className="gallery-track" ref={galleryRef}>
-            {visiblePhotos.map((photo, index) => (
-              <article key={`${photo.src}-${index}`} className="gallery-card">
-                <img
-                  src={responsiveSrc(photo.src)}
-                  srcSet={responsiveSrcSet(photo.src)}
-                  sizes="(max-width: 720px) 80vw, (max-width: 1200px) 50vw, 28vw"
-                  loading={index < 1 ? "eager" : "lazy"}
-                  decoding="async"
-                />
-                <button
-                  type="button"
-                  onClick={() => openLightbox(visiblePhotos, index)}
-                />
-              </article>
-            ))}
-          </div>
-          {visiblePhotos.length === 0 && (
-            <p className="empty-state">No photos in this category yet.</p>
-          )}
+          <section className="artist-hero" aria-labelledby="artist-hero-title">
+            <h2 id="artist-hero-title">
+              <span className="artist-hero-quote">
+                "You don't take a photograph, you make it."
+              </span>
+              <span className="artist-hero-cite">- Ansel Adams</span>
+            </h2>
+            <div className="artist-hero-wheel" ref={heroWheelRef}>
+              {FEATURED_PHOTOS.map((photo, index) => (
+                <article key={`${photo.title}-${index}`} className="artist-wheel-card">
+                  <img
+                    src={responsiveSrc(photo.src)}
+                    srcSet={responsiveSrcSet(photo.src)}
+                    sizes="(max-width: 760px) 78vw, 58vw"
+                    alt={photo.title}
+                    loading={index < 1 ? "eager" : "lazy"}
+                    decoding="async"
+                  />
+                  <button
+                    type="button"
+                    aria-label={`Open ${photo.title}`}
+                    onClick={() => {
+                      setIsHd(false);
+                      setHeroLightbox({ index });
+                    }}
+                  />
+                </article>
+              ))}
+            </div>
+          </section>
+
+          <section className="artist-library-intro" id="library" aria-label="Library">
+            <div className="artist-library-rule" aria-hidden="true" />
+            <h2 className="artist-library-title">Library</h2>
+          </section>
+
+          <LibraryCosmosSection className="artist-landing-library" />
+
+          <section className="artist-jukebox-intro" id="jukebox" aria-label="Jukebox">
+            <div className="artist-library-vinyl-rule" aria-hidden="true" />
+            <h2 className="artist-library-title">Jukebox</h2>
+          </section>
+          <VinylPlayerSection />
+          <SubpageFooter links={HOME_FOOTER_LINKS} />
         </section>
       </main>
 
-      {lightbox && (
+      {heroLightbox && (
         <div className="lightbox" role="dialog" aria-modal="true">
           <button
             className={`lightbox-hd${isHd ? " is-active" : ""}`}
@@ -292,7 +302,7 @@ export default function Home() {
             className="lightbox-close"
             type="button"
             aria-label="Close"
-            onClick={() => setLightbox(null)}
+            onClick={() => setHeroLightbox(null)}
           >
             ✕
           </button>
@@ -316,15 +326,16 @@ export default function Home() {
             <img
               src={
                 isHd
-                  ? withBasePath(lightbox.items[lightbox.index].src)
-                  : responsiveSrc(lightbox.items[lightbox.index].src)
+                  ? withBasePath(FEATURED_PHOTOS[heroLightbox.index].src)
+                  : responsiveSrc(FEATURED_PHOTOS[heroLightbox.index].src)
               }
               srcSet={
                 isHd
                   ? undefined
-                  : responsiveSrcSet(lightbox.items[lightbox.index].src)
+                  : responsiveSrcSet(FEATURED_PHOTOS[heroLightbox.index].src)
               }
               sizes={isHd ? undefined : "(max-width: 900px) 96vw, 80vw"}
+              alt={FEATURED_PHOTOS[heroLightbox.index].title}
               loading="eager"
               decoding="async"
             />
