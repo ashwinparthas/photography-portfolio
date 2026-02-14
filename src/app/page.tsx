@@ -42,12 +42,163 @@ export default function Home() {
     null
   );
   const [isHd, setIsHd] = useState(false);
+  const [showInitialLoader, setShowInitialLoader] = useState(true);
+  const [isLoaderExiting, setIsLoaderExiting] = useState(false);
+  const loaderProgressRef = useRef(0);
+  const loaderFillRef = useRef<HTMLDivElement | null>(null);
 
   const preloadImage = (src: string) => {
     if (typeof window === "undefined") return;
     const img = new Image();
     img.src = responsiveSrc(src);
   };
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const hasShownLoader = window.sessionStorage.getItem(
+      "homepage-loader-complete"
+    );
+    if (hasShownLoader === "1") {
+      loaderProgressRef.current = 100;
+      queueMicrotask(() => {
+        setShowInitialLoader(false);
+      });
+      return;
+    }
+
+    let cancelled = false;
+    let progressFrame = 0;
+    let completionFrame = 0;
+    let exitTimer: ReturnType<typeof setTimeout> | null = null;
+    const loaderStartTime = performance.now();
+    const minimumLoaderTimeMs = 1600;
+    const steadyFillDurationMs = 2600;
+
+    const wait = (durationMs: number) =>
+      new Promise<void>((resolve) => {
+        setTimeout(resolve, durationMs);
+      });
+
+    const setProgress = (next: number) => {
+      const clamped = Math.max(0, Math.min(100, next));
+      loaderProgressRef.current = clamped;
+      if (loaderFillRef.current) {
+        loaderFillRef.current.style.transform = `scaleX(${clamped / 100})`;
+      }
+    };
+
+    const waitForWindowLoad = () =>
+      new Promise<void>((resolve) => {
+        if (document.readyState === "complete") {
+          resolve();
+          return;
+        }
+        const onLoad = () => resolve();
+        window.addEventListener("load", onLoad, { once: true });
+      });
+
+    const waitForFonts = async () => {
+      if (!("fonts" in document)) return;
+      try {
+        await document.fonts.ready;
+      } catch {
+        // Ignore font wait failures; loading should continue.
+      }
+    };
+
+    const preloadCriticalImage = (src: string) =>
+      new Promise<void>((resolve) => {
+        const img = new Image();
+        img.decoding = "async";
+        img.onload = () => resolve();
+        img.onerror = () => resolve();
+        img.src = src;
+        if (img.complete) {
+          resolve();
+        }
+      });
+
+    const runLoader = async () => {
+      const animateSteadyFill = (now: number) => {
+        if (cancelled) return;
+        const elapsed = now - loaderStartTime;
+        const progressRatio = Math.min(1, elapsed / steadyFillDurationMs);
+        const eased = 1 - Math.pow(1 - progressRatio, 2.4);
+        const target = 6 + eased * 86;
+        if (target > loaderProgressRef.current) {
+          setProgress(target);
+        }
+        progressFrame = requestAnimationFrame(animateSteadyFill);
+      };
+
+      progressFrame = requestAnimationFrame(animateSteadyFill);
+
+      await Promise.all([
+        waitForWindowLoad(),
+        waitForFonts(),
+        Promise.all(
+          FEATURED_PHOTOS.slice(0, 6).map((photo) =>
+            preloadCriticalImage(responsiveSrc(photo.src))
+          )
+        )
+      ]);
+
+      if (cancelled) return;
+
+      const elapsed = performance.now() - loaderStartTime;
+      if (elapsed < minimumLoaderTimeMs) {
+        await wait(minimumLoaderTimeMs - elapsed);
+      }
+      if (cancelled) return;
+      if (progressFrame) {
+        cancelAnimationFrame(progressFrame);
+        progressFrame = 0;
+      }
+
+      const completionFrom = loaderProgressRef.current;
+      const completionDurationMs = 700;
+      const completionStart = performance.now();
+      const completeProgress = (now: number) => {
+        if (cancelled) return;
+        const t = Math.min(1, (now - completionStart) / completionDurationMs);
+        const eased = 1 - Math.pow(1 - t, 3);
+        const next = completionFrom + (100 - completionFrom) * eased;
+        setProgress(next);
+        if (t < 1) {
+          completionFrame = requestAnimationFrame(completeProgress);
+          return;
+        }
+        setProgress(100);
+        setIsLoaderExiting(true);
+        window.sessionStorage.setItem("homepage-loader-complete", "1");
+      };
+
+      completionFrame = requestAnimationFrame(completeProgress);
+
+      exitTimer = setTimeout(() => {
+        if (cancelled) return;
+        setShowInitialLoader(false);
+      }, completionDurationMs + 340);
+    };
+
+    runLoader();
+
+    return () => {
+      cancelled = true;
+      if (progressFrame) cancelAnimationFrame(progressFrame);
+      if (completionFrame) cancelAnimationFrame(completionFrame);
+      if (exitTimer) clearTimeout(exitTimer);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!showInitialLoader) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [showInitialLoader]);
 
   useEffect(() => {
     const track = heroWheelRef.current;
@@ -287,6 +438,27 @@ export default function Home() {
           <SubpageFooter links={HOME_FOOTER_LINKS} />
         </section>
       </main>
+
+      {showInitialLoader ? (
+        <div
+          className={`home-loading-screen${
+            isLoaderExiting ? " is-exiting" : ""
+          }`}
+          role="status"
+          aria-live="polite"
+          aria-label="Loading homepage"
+        >
+          <div className="home-loading-panel">
+            <p className="home-loading-label">Loading</p>
+            <div className="home-loading-bar" aria-hidden="true">
+              <div
+                ref={loaderFillRef}
+                className="home-loading-bar-fill"
+              />
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {heroLightbox && (
         <div className="lightbox" role="dialog" aria-modal="true">

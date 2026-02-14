@@ -75,6 +75,7 @@ export default function CategoryGallery({
   const revealInterval = useRef<ReturnType<typeof setInterval> | null>(null);
   const squareCounter = useRef(0);
   const squareTimeoutsRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
+  const lastTouchTimestampRef = useRef(0);
 
   const squareSize = 108;
   const revealDistance = 25;
@@ -252,14 +253,14 @@ export default function CategoryGallery({
       );
     };
 
-    const toStagePosition = (event: MouseEvent) => {
+    const toStagePositionFromClient = (clientX: number, clientY: number) => {
       const stage = stageRef.current;
       if (!stage) return null;
       const rect = stage.getBoundingClientRect();
       const width = stage.clientWidth;
       const height = stage.clientHeight;
-      const x = event.clientX - rect.left - stage.clientLeft;
-      const y = event.clientY - rect.top - stage.clientTop;
+      const x = clientX - rect.left - stage.clientLeft;
+      const y = clientY - rect.top - stage.clientTop;
       const inside = x >= 0 && x <= width && y >= 0 && y <= height;
       return {
         x: Math.max(0, Math.min(x, width)),
@@ -267,6 +268,9 @@ export default function CategoryGallery({
         inside
       };
     };
+
+    const toStagePosition = (event: MouseEvent) =>
+      toStagePositionFromClient(event.clientX, event.clientY);
 
     const revealSquareAtPosition = (x: number, y: number) => {
       const centerX = x - squareSize / 2;
@@ -350,6 +354,9 @@ export default function CategoryGallery({
     };
 
     const handleClick = (event: MouseEvent) => {
+      if (Date.now() - lastTouchTimestampRef.current < 420) {
+        return;
+      }
       const position = toStagePosition(event);
       if (!position || !position.inside || isMouseDownRef.current) {
         return;
@@ -357,16 +364,80 @@ export default function CategoryGallery({
       revealSquareAtPosition(position.x, position.y);
     };
 
+    const handleTouchStart = (event: TouchEvent) => {
+      if (event.touches.length === 0) return;
+      lastTouchTimestampRef.current = Date.now();
+      const touch = event.touches[0];
+      const position = toStagePositionFromClient(touch.clientX, touch.clientY);
+      if (!position || !position.inside) return;
+
+      event.preventDefault();
+      isMouseDownRef.current = true;
+      setMousePosition({ x: position.x, y: position.y });
+      mousePositionRef.current = { x: position.x, y: position.y };
+      revealSquareAtPosition(position.x, position.y);
+      lastRevealPosition.current = { x: position.x, y: position.y };
+
+      if (revealInterval.current) {
+        clearInterval(revealInterval.current);
+      }
+      revealInterval.current = setInterval(() => {
+        revealSquareAtPosition(mousePositionRef.current.x, mousePositionRef.current.y);
+      }, 150);
+    };
+
+    const handleTouchMove = (event: TouchEvent) => {
+      if (event.touches.length === 0) return;
+      const touch = event.touches[0];
+      const position = toStagePositionFromClient(touch.clientX, touch.clientY);
+      if (!position) return;
+
+      if (position.inside) {
+        event.preventDefault();
+      }
+      const newPosition = { x: position.x, y: position.y };
+      setMousePosition(newPosition);
+      mousePositionRef.current = newPosition;
+
+      if (isMouseDownRef.current && position.inside) {
+        const distance = Math.hypot(
+          newPosition.x - lastRevealPosition.current.x,
+          newPosition.y - lastRevealPosition.current.y
+        );
+
+        if (distance >= revealDistance) {
+          revealSquareAtPosition(newPosition.x, newPosition.y);
+          lastRevealPosition.current = newPosition;
+        }
+      }
+    };
+
+    const handleTouchEnd = () => {
+      isMouseDownRef.current = false;
+      if (revealInterval.current) {
+        clearInterval(revealInterval.current);
+        revealInterval.current = null;
+      }
+    };
+
     document.addEventListener("mousemove", handleMouseMove);
     document.addEventListener("mousedown", handleMouseDown);
     document.addEventListener("mouseup", handleMouseUp);
     document.addEventListener("click", handleClick);
+    document.addEventListener("touchstart", handleTouchStart, { passive: false });
+    document.addEventListener("touchmove", handleTouchMove, { passive: false });
+    document.addEventListener("touchend", handleTouchEnd, { passive: true });
+    document.addEventListener("touchcancel", handleTouchEnd, { passive: true });
 
     return () => {
       document.removeEventListener("mousemove", handleMouseMove);
       document.removeEventListener("mousedown", handleMouseDown);
       document.removeEventListener("mouseup", handleMouseUp);
       document.removeEventListener("click", handleClick);
+      document.removeEventListener("touchstart", handleTouchStart);
+      document.removeEventListener("touchmove", handleTouchMove);
+      document.removeEventListener("touchend", handleTouchEnd);
+      document.removeEventListener("touchcancel", handleTouchEnd);
       if (revealInterval.current) {
         clearInterval(revealInterval.current);
         revealInterval.current = null;
@@ -440,7 +511,7 @@ export default function CategoryGallery({
           aria-label={`${currentCategory} paintbrush reveal`}
         >
           <div className="category-brush-stage category-brush-page" ref={stageRef}>
-            <p className="category-brush-instruction">Click and drag to reveal the image.</p>
+            <p className="category-brush-instruction">Touch or click and drag to reveal the image.</p>
 
             {revealedSquares.map((square) => {
               return (

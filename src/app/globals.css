@@ -1391,6 +1391,7 @@ img {
   color: #fff;
   user-select: none;
   cursor: none;
+  touch-action: none;
 }
 
 .category-brush-instruction {
@@ -1455,6 +1456,57 @@ img {
 
 .artist-home-main {
   display: block;
+}
+
+.home-loading-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: #0a0a0a;
+  opacity: 1;
+  transition: opacity 300ms ease;
+}
+
+.home-loading-screen.is-exiting {
+  opacity: 0;
+}
+
+.home-loading-panel {
+  width: min(420px, calc(100vw - 48px));
+  display: grid;
+  gap: 10px;
+}
+
+.home-loading-label {
+  margin: 0;
+  color: #f0f0f0;
+  font-family: var(--font-body), "Helvetica Neue", Arial, sans-serif;
+  font-size: 1rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  text-align: center;
+}
+
+.home-loading-bar {
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.home-loading-bar-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: #f0f0f0;
+  transform-origin: left center;
+  transform: scaleX(0);
+  transition: transform 90ms linear;
+  will-change: transform;
 }
 
 .artist-landing {
@@ -1966,5 +2018,190 @@ img {
     grid-template-columns: 1fr;
     gap: 18px;
     padding: 24px 20px;
+  }
+}
+
+@media (max-width: 900px) and (hover: none) and (pointer: coarse) {
+  .artist-landing {
+    padding: clamp(14px, 4vw, 22px) clamp(12px, 4vw, 18px) 0;
+  }
+
+  .artist-header {
+    border-radius: 20px;
+    padding: 14px;
+    gap: 10px 12px;
+  }
+
+  .artist-wordmark {
+    font-size: clamp(1.7rem, 8vw, 2.2rem);
+    line-height: 0.94;
+  }
+
+  .artist-origin,
+  .artist-nav,
+  .artist-language {
+    font-size: 0.9rem;
+    gap: 6px;
+    line-height: 1.25;
+  }
+
+  .artist-header-rule {
+    margin: 14px 0 20px;
+  }
+
+  .artist-library-intro {
+    margin-top: 18px;
+    gap: 10px;
+  }
+
+  .artist-jukebox-intro {
+    margin-top: 16px;
+    margin-bottom: 16px;
+    gap: 10px;
+  }
+
+  .artist-library-title {
+    padding-top: 8px;
+    font-size: clamp(1.65rem, 9.2vw, 2.3rem);
+    -webkit-text-stroke: 1.8px var(--header-outline-color);
+  }
+
+  .artist-landing-library {
+    margin-top: 10px;
+  }
+
+  .library-cosmos {
+    padding: 10px 0 14px;
+    height: auto;
+    min-height: clamp(360px, 70svh, 560px);
+  }
+
+  .library-viewport-shell {
+    width: min(680px, calc(100vw - 24px));
+    height: min(760px, calc(100svh - 230px));
+    min-height: 320px;
+  }
+
+  .library-instruction {
+    min-width: 0;
+    max-width: calc(100% - 112px);
+  }
+
+  .vinyl-entry {
+    padding: 10px;
+  }
+
+  .vinyl-entry-frame {
+    border-radius: 14px;
+  }
+
+  .artist-subpage-main {
+    padding: 16px 12px 36px;
+  }
+
+  .artist-subpage-header {
+    border-radius: 20px;
+    padding: 14px 12px;
+  }
+
+  .artist-subpage-header.artist-subpage-header-minimal {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .artist-subpage-current,
+  .artist-subpage-reveal-link {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+}
+
+@media (max-width: 900px) and (orientation: landscape) and (hover: none) and (pointer: coarse) {
+  .artist-header {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px 14px;
+    padding: 12px 14px;
+  }
+
+  .artist-header-rule {
+    margin: 12px 0 14px;
+  }
+
+  .artist-hero {
+    gap: 14px;
+    --hero-media-height: clamp(230px, 58svh, 360px);
+  }
+
+  .artist-library-intro {
+    margin-top: 12px;
+    gap: 8px;
+  }
+
+  .artist-jukebox-intro {
+    margin-top: 10px;
+    margin-bottom: 10px;
+    gap: 8px;
+  }
+
+  .artist-library-title {
+    font-size: clamp(1.45rem, 4.4vw, 1.95rem);
+    -webkit-text-stroke: 1.5px var(--header-outline-color);
+  }
+
+  .library-cosmos {
+    padding: 8px 0 10px;
+    min-height: 320px;
+  }
+
+  .library-canvas-stage {
+    padding: 8px;
+  }
+
+  .library-viewport-shell {
+    width: min(960px, calc(100vw - 24px));
+    height: min(460px, calc(100svh - 160px));
+    min-height: 250px;
+  }
+
+  .library-overlay-box {
+    padding: 7px 9px;
+    font-size: 10px;
+  }
+
+  .library-instruction {
+    top: 10px;
+    font-size: 11px;
+    padding: 8px 10px;
+    max-width: calc(100% - 100px);
+  }
+
+  .library-position {
+    display: none;
+  }
+
+  .library-zoom-controls {
+    right: 10px;
+    bottom: 10px;
+    gap: 4px;
+  }
+
+  .library-zoom-button {
+    width: 28px;
+    height: 28px;
+    font-size: 14px;
+    border-radius: 8px;
+  }
+
+  .vinyl-entry {
+    min-height: min(100svh, 420px);
+  }
+
+  .vinyl-entry-frame {
+    height: min(calc(100svh - 20px), 400px);
+    min-height: 320px;
+  }
+
+  .artist-subpage-header.artist-subpage-header-minimal {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

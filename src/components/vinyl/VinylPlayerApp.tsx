@@ -8,6 +8,8 @@ import { withBasePath } from "@/lib/basePath";
 
 export default function App() {
   const [isMobile, setIsMobile] = useState(false);
+  const [isMobileLandscape, setIsMobileLandscape] = useState(false);
+  const [mobileViewport, setMobileViewport] = useState({ width: 0, height: 0 });
   const [isPlaying, setIsPlaying] = useState(false);
   const [speedIndex, setSpeedIndex] = useState(0);
   const [currentAlbumId, setCurrentAlbumId] = useState("fallen");
@@ -29,6 +31,7 @@ export default function App() {
   const currentTrackRef = useRef<string | null>(null);
   const audioPoolRef = useRef<Map<string, HTMLAudioElement>>(new Map());
   const activePlayPromisesRef = useRef<Set<Promise<void>>>(new Set());
+  const playbackRequestIdRef = useRef(0);
 
   const speedSettings = [
     { rpm: 33, rate: 1.0, duration: 3 },
@@ -149,15 +152,37 @@ export default function App() {
 
   useEffect(() => {
     const checkIsMobile = () => {
-      setIsMobile(window.innerWidth < 640); // Use 640px as breakpoint (sm in Tailwind)
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+      const isCoarsePointer = window.matchMedia(
+        "(hover: none) and (pointer: coarse)"
+      ).matches;
+      const isLandscape = window.matchMedia("(orientation: landscape)").matches;
+      const shouldUseMobileLayout =
+        width < 640 || (isCoarsePointer && (width <= 920 || height <= 520));
+
+      setIsMobile(shouldUseMobileLayout);
+      setIsMobileLandscape(shouldUseMobileLayout && isLandscape);
+      setMobileViewport({ width, height });
     };
 
     checkIsMobile();
     window.addEventListener("resize", checkIsMobile);
+    window.addEventListener("orientationchange", checkIsMobile);
 
     return () =>
-      window.removeEventListener("resize", checkIsMobile);
+      {
+        window.removeEventListener("resize", checkIsMobile);
+        window.removeEventListener("orientationchange", checkIsMobile);
+      };
   }, []);
+
+  const mobilePlayerScale = isMobileLandscape
+    ? Math.min(1, Math.max(0.56, (mobileViewport.height - 120) / 444))
+    : 1;
+  const mobileStackScale = isMobileLandscape
+    ? Math.min(1, Math.max(0.72, (mobileViewport.height - 120) / 240))
+    : 1;
 
   // Initialize Audio Context on first play
   const initializeAudio = () => {
@@ -186,13 +211,20 @@ export default function App() {
 
   // BULLETPROOF audio management - never touches audio elements with active promises
   const stopAllAudioSafely = async () => {
-    // Stop current playing audio with volume fade only
-    if (audioElementRef.current) {
-      try {
-        audioElementRef.current.volume = 0;
-      } catch (error: any) {
-        // Ignore volume errors
-      }
+    // Hard-stop every created audio element to prevent track overlap.
+    const audioContainer = document.getElementById("audio-container");
+    if (audioContainer) {
+      const nodes = audioContainer.querySelectorAll("audio");
+      nodes.forEach((node) => {
+        try {
+          node.volume = 0;
+          node.muted = true;
+          node.pause();
+          node.currentTime = 0;
+        } catch {
+          // Ignore element stop errors.
+        }
+      });
     }
 
     // Clear references without touching the audio elements
@@ -381,6 +413,8 @@ export default function App() {
   // Handle real audio file playback only
   useEffect(() => {
     const currentSpeed = speedSettings[speedIndex];
+    const requestId = ++playbackRequestIdRef.current;
+    const isStaleRequest = () => requestId !== playbackRequestIdRef.current;
 
     // Create new abort controller
     if (abortControllerRef.current) {
@@ -391,6 +425,8 @@ export default function App() {
     // Async function to handle the entire audio setup
     const handleAudioChange = async () => {
       try {
+        if (isStaleRequest()) return;
+
         // Initialize audio on first play attempt
         if (isPlaying && !audioInitialized) {
           initializeAudio();
@@ -399,6 +435,7 @@ export default function App() {
         // EXPLICIT STOP: If tonearm is NOT on vinyl, ensure no audio plays
         if (!isPlaying) {
           await stopAllAudioSafely();
+          if (isStaleRequest()) return;
           setLoadingProgress(0);
           return;
         }
@@ -425,15 +462,11 @@ export default function App() {
             // Check if we're already playing this exact track/speed combo
             if (currentTrackRef.current === trackKey && audioElementRef.current) {
               try {
+                audioElementRef.current.muted = false;
                 audioElementRef.current.volume = 1.0;
               } catch (error: any) {
                 // Ignore volume errors
               }
-              return;
-            }
-
-            // Prevent multiple simultaneous loading attempts
-            if (isLoadingAudio) {
               return;
             }
 
@@ -442,6 +475,7 @@ export default function App() {
 
             // Stop any current audio safely
             await stopAllAudioSafely();
+            if (isStaleRequest()) return;
 
             try {
               // Get sources for this track
@@ -462,6 +496,15 @@ export default function App() {
 
               // Create completely isolated audio element
               const audio = await createIsolatedAudioElement(trackKey, allSources);
+              if (isStaleRequest()) {
+                try {
+                  audio.pause();
+                  audio.currentTime = 0;
+                } catch {
+                  // Ignore stale audio cleanup failures.
+                }
+                return;
+              }
               
               setLoadingProgress(60);
 
@@ -481,11 +524,13 @@ export default function App() {
               setLoadingProgress(80);
 
               // Store references
+              audio.muted = false;
               audioElementRef.current = audio;
               currentTrackRef.current = trackKey;
 
               // Start playback with promise-safe method
               await playAudioSafely(audio, trackKey);
+              if (isStaleRequest()) return;
 
               setCurrentFallbackIndex(prev => ({ ...prev, [currentAlbumId]: 0 }));
               setLoadingProgress(100);
@@ -493,27 +538,35 @@ export default function App() {
             } catch (error: any) {
               // Check if it was aborted
               if (error?.name === 'AbortError') {
-                setLoadingProgress(0);
+                if (!isStaleRequest()) {
+                  setLoadingProgress(0);
+                }
                 return;
               }
 
-              setLoadingProgress(0);
-              setAudioErrorMessage(
-                "Full MP3 not found. Add files to /public/songs/ (gravity, vivid-dreams, hereditary, being-so-normal, fallen)."
-              );
-              setAudioError(true);
-              setIsPlaying(false);
+              if (!isStaleRequest()) {
+                setLoadingProgress(0);
+                setAudioErrorMessage(
+                  "Full MP3 not found. Add files to /public/songs/ (gravity, vivid-dreams, hereditary, being-so-normal, fallen)."
+                );
+                setAudioError(true);
+                setIsPlaying(false);
+              }
             } finally {
-              setIsLoadingAudio(false);
+              if (!isStaleRequest()) {
+                setIsLoadingAudio(false);
+              }
             }
           } catch (error: any) {
             if (error?.name === 'AbortError') {
               return;
             }
             void error;
-            setAudioError(true);
-            setIsPlaying(false);
-            setIsLoadingAudio(false);
+            if (!isStaleRequest()) {
+              setAudioError(true);
+              setIsPlaying(false);
+              setIsLoadingAudio(false);
+            }
           }
         }
       } catch (error: any) {
@@ -521,7 +574,9 @@ export default function App() {
           return;
         }
         void error;
-        setIsLoadingAudio(false);
+        if (!isStaleRequest()) {
+          setIsLoadingAudio(false);
+        }
       }
     };
 
@@ -702,9 +757,18 @@ export default function App() {
           )}
 
           {/* Mobile layout - evenly spaced vertical layout with toast, vinyl player, and album stack */}
-          <div className="flex flex-col items-center justify-between min-h-full w-full py-8">
+          <div
+            className="flex flex-col items-center justify-between min-h-full w-full"
+            style={{
+              padding: isMobileLandscape ? "8px 0 10px" : "20px 0 24px",
+              gap: isMobileLandscape ? "8px" : "20px",
+            }}
+          >
             {/* Status Toast - top element */}
-            <div className="flex-shrink-0 w-full flex items-center justify-center">
+            <div
+              className="flex-shrink-0 w-full flex items-center justify-center"
+              style={{ minHeight: isMobileLandscape ? "40px" : "56px" }}
+            >
               {currentTrack ? (
                 <div className="mx-auto bg-gray-800/90 backdrop-blur-sm text-white px-4 py-2 rounded-lg shadow-lg text-center">
                   <div
@@ -729,25 +793,50 @@ export default function App() {
               )}
             </div>
 
-            {/* Vinyl Player - center element */}
-            <div className="flex-shrink-0">
-              <VinylPlayerMobile
-                isPlaying={isPlaying}
-                setIsPlaying={setIsPlaying}
-                speedIndex={speedIndex}
-                setSpeedIndex={setSpeedIndex}
-                speedSettings={speedSettings}
-                currentAlbumId={currentAlbumId}
-              />
-            </div>
+            <div
+              style={{
+                display: "flex",
+                flexDirection: isMobileLandscape ? "row" : "column",
+                alignItems: "center",
+                justifyContent: "center",
+                width: "100%",
+                flex: 1,
+                minHeight: 0,
+                gap: isMobileLandscape ? "16px" : "24px"
+              }}
+            >
+              {/* Vinyl Player - center element */}
+              <div
+                className="flex-shrink-0"
+                style={{
+                  transform: `scale(${mobilePlayerScale})`,
+                  transformOrigin: "center"
+                }}
+              >
+                <VinylPlayerMobile
+                  isPlaying={isPlaying}
+                  setIsPlaying={setIsPlaying}
+                  speedIndex={speedIndex}
+                  setSpeedIndex={setSpeedIndex}
+                  speedSettings={speedSettings}
+                  currentAlbumId={currentAlbumId}
+                />
+              </div>
 
-            {/* Album Stack - bottom element */}
-            <div className="flex-shrink-0 flex items-center justify-center">
-              <AlbumStack
-                currentAlbumId={currentAlbumId}
-                onAlbumChange={setCurrentAlbumId}
-                isMobile={isMobile}
-              />
+              {/* Album Stack - bottom element */}
+              <div
+                className="flex-shrink-0 flex items-center justify-center"
+                style={{
+                  transform: `scale(${mobileStackScale})`,
+                  transformOrigin: "center"
+                }}
+              >
+                <AlbumStack
+                  currentAlbumId={currentAlbumId}
+                  onAlbumChange={setCurrentAlbumId}
+                  isMobile={isMobile}
+                />
+              </div>
             </div>
           </div>
         </>
