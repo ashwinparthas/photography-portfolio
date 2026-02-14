@@ -55,24 +55,14 @@ export default function Home() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const hasShownLoader = window.sessionStorage.getItem(
-      "homepage-loader-complete"
-    );
-    if (hasShownLoader === "1") {
-      loaderProgressRef.current = 100;
-      queueMicrotask(() => {
-        setShowInitialLoader(false);
-      });
-      return;
-    }
 
     let cancelled = false;
     let progressFrame = 0;
     let completionFrame = 0;
     let exitTimer: ReturnType<typeof setTimeout> | null = null;
     const loaderStartTime = performance.now();
-    const minimumLoaderTimeMs = 1600;
-    const steadyFillDurationMs = 2600;
+    const likelyWarmPath = document.readyState === "complete";
+    const steadyFillDurationMs = likelyWarmPath ? 1500 : 2500;
 
     const wait = (durationMs: number) =>
       new Promise<void>((resolve) => {
@@ -146,6 +136,8 @@ export default function Home() {
       if (cancelled) return;
 
       const elapsed = performance.now() - loaderStartTime;
+      const isFastPath = elapsed < 420;
+      const minimumLoaderTimeMs = isFastPath ? 460 : 1300;
       if (elapsed < minimumLoaderTimeMs) {
         await wait(minimumLoaderTimeMs - elapsed);
       }
@@ -156,7 +148,8 @@ export default function Home() {
       }
 
       const completionFrom = loaderProgressRef.current;
-      const completionDurationMs = 700;
+      const completionDurationMs = isFastPath ? 280 : 700;
+      const exitDelayMs = isFastPath ? 150 : 340;
       const completionStart = performance.now();
       const completeProgress = (now: number) => {
         if (cancelled) return;
@@ -170,7 +163,6 @@ export default function Home() {
         }
         setProgress(100);
         setIsLoaderExiting(true);
-        window.sessionStorage.setItem("homepage-loader-complete", "1");
       };
 
       completionFrame = requestAnimationFrame(completeProgress);
@@ -178,7 +170,7 @@ export default function Home() {
       exitTimer = setTimeout(() => {
         if (cancelled) return;
         setShowInitialLoader(false);
-      }, completionDurationMs + 340);
+      }, completionDurationMs + exitDelayMs);
     };
 
     runLoader();

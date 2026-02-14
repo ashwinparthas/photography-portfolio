@@ -7,8 +7,13 @@ import { useState, useEffect, useRef } from "react";
 import { withBasePath } from "@/lib/basePath";
 
 export default function App() {
+  const DESKTOP_ROW_WIDTH = 487.249 + 72 + 280;
+  const DESKTOP_ROW_HEIGHT = 620;
+  const DESKTOP_CANVAS_WIDTH = DESKTOP_ROW_WIDTH + 120;
+  const DESKTOP_CANVAS_HEIGHT = DESKTOP_ROW_HEIGHT + 120;
   const [isMobile, setIsMobile] = useState(false);
   const [isMobileLandscape, setIsMobileLandscape] = useState(false);
+  const [desktopCompositionScale, setDesktopCompositionScale] = useState(1);
   const [mobileViewport, setMobileViewport] = useState({ width: 0, height: 0 });
   const [isPlaying, setIsPlaying] = useState(false);
   const [speedIndex, setSpeedIndex] = useState(0);
@@ -18,9 +23,7 @@ export default function App() {
   const [audioErrorMessage, setAudioErrorMessage] = useState("");
   const [showSetupGuide, setShowSetupGuide] = useState(false);
   const [showFileChecker, setShowFileChecker] = useState(false);
-  const [currentFallbackIndex, setCurrentFallbackIndex] = useState<{[key: string]: number}>({});
   const [isLoadingAudio, setIsLoadingAudio] = useState(false);
-  const [hasTriedExternalUrls, setHasTriedExternalUrls] = useState(true); // Skip external URL attempts by default
   const [loadingProgress, setLoadingProgress] = useState(0);
   const audioContextRef = useRef<AudioContext | null>(null);
   const gainNodeRef = useRef<GainNode | null>(null);
@@ -38,32 +41,6 @@ export default function App() {
     { rpm: 45, rate: 1.36, duration: 2.2 },
     { rpm: 78, rate: 2.36, duration: 1.3 },
   ];
-
-  // Optimized function to generate the most likely working Dropbox URLs (reduced for speed)
-  const generateDropboxSources = (originalUrl: string) => {
-    const sources = [];
-    
-    try {
-      // Convert Dropbox sharing URL to the most reliable formats only
-      if (originalUrl.includes('dropbox.com/scl/fi/')) {
-        // Strategy 1: dl.dropboxusercontent.com with raw=1 (most reliable)
-        sources.push(originalUrl.replace('www.dropbox.com', 'dl.dropboxusercontent.com').replace('dl=1', 'raw=1'));
-        
-        // Strategy 2: Keep original domain, just change dl=1 to raw=1
-        sources.push(originalUrl.replace('dl=1', 'raw=1'));
-        
-        // Strategy 3: Original URL as final fallback
-        sources.push(originalUrl);
-      } else {
-        // Non-Dropbox URL - just return as is
-        sources.push(originalUrl);
-      }
-    } catch {
-      sources.push(originalUrl);
-    }
-    
-    return sources;
-  };
 
   // Music library - full local files only
   const getMusicLibrary = () => {
@@ -87,55 +64,30 @@ export default function App() {
         title: "Gravity",
         artist: "Brent Faiyaz",
         audioUrl: originalUrls.gravity,
-        dropboxSources: generateDropboxSources(localSongPaths.gravity),
-        fallbackUrls: [
-          originalUrls.gravity,
-          ...generateDropboxSources(localSongPaths.gravity)
-        ],
         duration: 215,
       },
       vivid_dreams: {
         title: "VIVID DREAMS",
         artist: "KAYTRANADA",
         audioUrl: originalUrls.vivid_dreams,
-        dropboxSources: generateDropboxSources(localSongPaths.vivid_dreams),
-        fallbackUrls: [
-          originalUrls.vivid_dreams,
-          ...generateDropboxSources(localSongPaths.vivid_dreams)
-        ],
         duration: 277,
       },
       hereditary: {
         title: "Hereditary",
         artist: "JID",
         audioUrl: originalUrls.hereditary,
-        dropboxSources: generateDropboxSources(localSongPaths.hereditary),
-        fallbackUrls: [
-          originalUrls.hereditary,
-          ...generateDropboxSources(localSongPaths.hereditary)
-        ],
         duration: 243,
       },
       being_so_normal: {
-        title: "Being so Normal",
+        title: "Being So Normal",
         artist: "Peach Pit",
         audioUrl: originalUrls.being_so_normal,
-        dropboxSources: generateDropboxSources(localSongPaths.being_so_normal),
-        fallbackUrls: [
-          originalUrls.being_so_normal,
-          ...generateDropboxSources(localSongPaths.being_so_normal)
-        ],
         duration: 220,
       },
       fallen: {
         title: "Fallen",
         artist: "Mya",
         audioUrl: originalUrls.fallen,
-        dropboxSources: generateDropboxSources(localSongPaths.fallen),
-        fallbackUrls: [
-          originalUrls.fallen,
-          ...generateDropboxSources(localSongPaths.fallen)
-        ],
         duration: 215,
       },
     };
@@ -149,6 +101,7 @@ export default function App() {
     musicLibrary[currentAlbumId as keyof typeof musicLibrary];
   const playbackStatusLabel = isPlaying ? "Playing" : "Not Playing";
   const playbackStatusIcon = isPlaying ? "▶️" : "⏸️";
+  const desktopStageRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const checkIsMobile = () => {
@@ -176,6 +129,37 @@ export default function App() {
         window.removeEventListener("orientationchange", checkIsMobile);
       };
   }, []);
+
+  useEffect(() => {
+    if (isMobile) {
+      setDesktopCompositionScale(1);
+      return;
+    }
+
+    const stage = desktopStageRef.current;
+    if (!stage) return;
+
+    const updateScale = () => {
+      const availableWidth = Math.max(0, stage.clientWidth - 10);
+      const availableHeight = Math.max(0, stage.clientHeight - 8);
+      const widthScale = availableWidth / DESKTOP_CANVAS_WIDTH;
+      const heightScale = availableHeight / DESKTOP_CANVAS_HEIGHT;
+      const nextScale = Math.min(1, widthScale, heightScale);
+      setDesktopCompositionScale(Math.max(0.3, nextScale));
+    };
+
+    updateScale();
+    const observer = new ResizeObserver(updateScale);
+    observer.observe(stage);
+    window.addEventListener("resize", updateScale);
+    window.visualViewport?.addEventListener("resize", updateScale);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", updateScale);
+      window.visualViewport?.removeEventListener("resize", updateScale);
+    };
+  }, [DESKTOP_CANVAS_HEIGHT, DESKTOP_CANVAS_WIDTH, isMobile]);
 
   const mobilePlayerScale = isMobileLandscape
     ? Math.min(1, Math.max(0.56, (mobileViewport.height - 120) / 444))
@@ -478,19 +462,7 @@ export default function App() {
             if (isStaleRequest()) return;
 
             try {
-              // Get sources for this track
-              const fallbackUrls = (currentTrack as any).fallbackUrls || [];
-              const localFileUrl = fallbackUrls.find((url: string) =>
-                url.includes("/songs/")
-              );
-              
-              const allSources = Array.from(
-                new Set(
-                  localFileUrl
-                    ? [withBasePath(localFileUrl), localFileUrl]
-                    : [withBasePath(currentTrack.audioUrl), currentTrack.audioUrl]
-                )
-              );
+              const allSources = [currentTrack.audioUrl];
 
               setLoadingProgress(30);
 
@@ -532,7 +504,6 @@ export default function App() {
               await playAudioSafely(audio, trackKey);
               if (isStaleRequest()) return;
 
-              setCurrentFallbackIndex(prev => ({ ...prev, [currentAlbumId]: 0 }));
               setLoadingProgress(100);
               
             } catch (error: any) {
@@ -607,20 +578,6 @@ export default function App() {
             "radial-gradient(1400px 780px at 50% -10%, rgba(255,255,255,0.09), transparent 58%), linear-gradient(180deg, #0c0c0d 0%, #060606 100%)"
         }}
       >
-        <div
-          style={{
-            position: "absolute",
-            left: "10%",
-            right: "10%",
-            top: "-8%",
-            height: "34%",
-            borderRadius: "44% 56% 58% 42% / 48% 40% 60% 52%",
-            background:
-              "radial-gradient(70% 90% at 50% 12%, rgba(255,255,255,0.1), rgba(24,24,24,0.94) 55%, rgba(6,6,6,0.98) 100%)",
-            opacity: 0.88,
-            filter: "blur(0.2px)"
-          }}
-        />
         <div
           style={{
             position: "absolute",
@@ -720,8 +677,63 @@ export default function App() {
 
       <div
         className="size-full overflow-hidden flex items-center justify-center p-4 relative"
-        style={{ zIndex: 20 }}
+        style={{
+          zIndex: 20,
+          padding: isMobile ? "16px" : "clamp(8px, 1.4vh, 16px)"
+        }}
       >
+      {currentTrack && (
+        <div
+          className="absolute inset-x-0 z-50 flex justify-center px-3"
+          style={{
+            top: isMobile ? (isMobileLandscape ? "8px" : "10px") : "10px",
+            zIndex: 95,
+            pointerEvents: "none"
+          }}
+        >
+          <div
+            className="text-white text-center"
+            style={{
+              width: "max-content",
+              borderRadius: "18px",
+              padding: "9px 12px",
+              background:
+                "linear-gradient(130deg, rgba(30, 54, 92, 0.96) 0%, rgba(24, 44, 76, 0.96) 100%)",
+              border: "1px solid rgba(255,255,255,0.14)",
+              display: "grid",
+              justifyItems: "center",
+              gap: "4px"
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "8px",
+                textAlign: "center",
+                lineHeight: 1.2,
+                whiteSpace: "nowrap"
+              }}
+              className="text-sm font-medium"
+            >
+              <span aria-hidden="true">{playbackStatusIcon}</span>
+              <span style={{ whiteSpace: "nowrap" }}>{playbackStatusLabel}</span>
+            </div>
+            <div
+              className="text-xs text-gray-300 text-center"
+              style={{
+                lineHeight: 1.28,
+                whiteSpace: "nowrap",
+                textAlign: "center"
+              }}
+            >
+              {currentTrack.title} - {currentTrack.artist}
+            </div>
+          </div>
+        </div>
+      )}
+
       {isMobile ? (
         <>
           {/* Error toast - still absolute positioned */}
@@ -764,34 +776,10 @@ export default function App() {
               gap: isMobileLandscape ? "8px" : "20px",
             }}
           >
-            {/* Status Toast - top element */}
             <div
-              className="flex-shrink-0 w-full flex items-center justify-center"
-              style={{ minHeight: isMobileLandscape ? "40px" : "56px" }}
-            >
-              {currentTrack ? (
-                <div className="mx-auto bg-gray-800/90 backdrop-blur-sm text-white px-4 py-2 rounded-lg shadow-lg text-center">
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      gap: "8px",
-                      textAlign: "center"
-                    }}
-                    className="text-sm font-medium"
-                  >
-                    <span aria-hidden="true">{playbackStatusIcon}</span>
-                    <span>{playbackStatusLabel}</span>
-                  </div>
-                  <div className="text-xs text-gray-300 text-center">
-                    {currentTrack.title} - {currentTrack.artist}
-                  </div>
-                </div>
-              ) : (
-                <div className="h-16"></div> // Placeholder to maintain spacing
-              )}
-            </div>
+              className="flex-shrink-0 w-full"
+              style={{ minHeight: isMobileLandscape ? "68px" : "80px" }}
+            />
 
             <div
               style={{
@@ -842,30 +830,6 @@ export default function App() {
         </>
       ) : (
         <>
-          {/* Desktop Status Indicators - absolute positioned */}
-          {currentTrack && (
-            <div className="absolute top-8 inset-x-0 z-50 flex justify-center" style={{ zIndex: 80 }}>
-              <div className="bg-gray-800/90 backdrop-blur-sm text-white px-4 py-2 rounded-lg shadow-lg text-center">
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: "8px",
-                    textAlign: "center"
-                  }}
-                  className="text-sm font-medium"
-                >
-                  <span aria-hidden="true">{playbackStatusIcon}</span>
-                  <span>{playbackStatusLabel}</span>
-                </div>
-                <div className="text-xs text-gray-300 text-center">
-                  {currentTrack.title} - {currentTrack.artist}
-                </div>
-              </div>
-            </div>
-          )}
-
           {audioError && (
             <div className="absolute bg-amber-600/90 backdrop-blur-sm text-white px-4 py-2 rounded-lg shadow-lg z-40 max-w-sm top-1/2 left-4 transform -translate-y-1/2">
               <div className="text-sm font-medium">
@@ -897,22 +861,49 @@ export default function App() {
             </div>
           )}
           
-          {/* Desktop layout - horizontal with center alignment and flexible height */}
-          <div className="flex items-center justify-center gap-[100px] max-w-full max-h-full overflow-hidden">
-            <VinylPlayer
-              isPlaying={isPlaying}
-              setIsPlaying={setIsPlaying}
-              speedIndex={speedIndex}
-              setSpeedIndex={setSpeedIndex}
-              speedSettings={speedSettings}
-              currentAlbumId={currentAlbumId}
-            />
-            <div className="w-[280px] min-h-[280px] max-h-[650px] flex items-center justify-center overflow-visible">
-              <AlbumStack
-                currentAlbumId={currentAlbumId}
-                onAlbumChange={setCurrentAlbumId}
-                isMobile={isMobile}
-              />
+          <div
+            className="w-full h-full flex flex-col items-center justify-start"
+            style={{
+              gap: "10px",
+              paddingTop: "clamp(70px, 9.5vh, 100px)",
+              paddingBottom: "6px"
+            }}
+          >
+            {/* Desktop layout - horizontal with center alignment and flexible height */}
+            <div
+              ref={desktopStageRef}
+              className="w-full flex-1 min-h-0 flex items-center justify-center overflow-hidden px-1"
+              style={{ marginTop: "2px" }}
+            >
+              <div
+                style={{
+                  position: "relative",
+                  width: `${DESKTOP_CANVAS_WIDTH}px`,
+                  height: `${DESKTOP_CANVAS_HEIGHT}px`,
+                  transform: `scale(${desktopCompositionScale})`,
+                  transformOrigin: "center center"
+                }}
+              >
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="flex items-center justify-center gap-[72px]">
+                    <VinylPlayer
+                      isPlaying={isPlaying}
+                      setIsPlaying={setIsPlaying}
+                      speedIndex={speedIndex}
+                      setSpeedIndex={setSpeedIndex}
+                      speedSettings={speedSettings}
+                      currentAlbumId={currentAlbumId}
+                    />
+                    <div className="w-[280px] h-[620px] flex items-center justify-center overflow-visible">
+                      <AlbumStack
+                        currentAlbumId={currentAlbumId}
+                        onAlbumChange={setCurrentAlbumId}
+                        isMobile={isMobile}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </>

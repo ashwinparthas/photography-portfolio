@@ -14,7 +14,7 @@ export function FileStatusChecker({ isVisible, onClose }: FileStatusCheckerProps
     "/songs/gravity.mp3": "Gravity - Brent Faiyaz (WASTELAND)",
     "/songs/vivid-dreams.mp3": "VIVID DREAMS - KAYTRANADA (99.9%)",
     "/songs/hereditary.mp3": "Hereditary - JID (The Never Story)",
-    "/songs/being-so-normal.mp3": "Being so Normal - Peach Pit (Being So Normal)",
+    "/songs/being-so-normal.mp3": "Being So Normal - Peach Pit (Being So Normal)",
     "/songs/fallen.mp3": "Fallen - Mya (Moodring)"
   };
 

@@ -19,7 +19,8 @@ type RevealedSquare = {
   x: number;
   y: number;
   id: string;
-  timeoutId: ReturnType<typeof setTimeout>;
+  key: string;
+  permanent: boolean;
 };
 
 type Rect = {
@@ -49,6 +50,8 @@ export default function CategoryGallery({
   images,
   currentCategory
 }: CategoryGalleryProps) {
+  const [showSubpageLoader, setShowSubpageLoader] = useState(true);
+  const [isSubpageLoaderExiting, setIsSubpageLoaderExiting] = useState(false);
   const [lightbox, setLightbox] = useState<LightboxState | null>(null);
   const [isHd, setIsHd] = useState(false);
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
@@ -75,6 +78,10 @@ export default function CategoryGallery({
   const revealInterval = useRef<ReturnType<typeof setInterval> | null>(null);
   const squareCounter = useRef(0);
   const squareTimeoutsRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
+  const squareTimeoutsByKeyRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(
+    new Map()
+  );
+  const revealPassesByKeyRef = useRef<Map<string, number>>(new Map());
   const lastTouchTimestampRef = useRef(0);
 
   const squareSize = 108;
@@ -85,6 +92,73 @@ export default function CategoryGallery({
   );
   const drawImage = useMemo(() => withBasePath(selectedPhotoSrc), [selectedPhotoSrc]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    let cancelled = false;
+    let exitTimer: ReturnType<typeof setTimeout> | null = null;
+    const loaderStartTime = performance.now();
+
+    const wait = (durationMs: number) =>
+      new Promise<void>((resolve) => {
+        setTimeout(resolve, durationMs);
+      });
+
+    const preloadImage = (src: string) =>
+      new Promise<void>((resolve) => {
+        const img = new Image();
+        img.decoding = "async";
+        img.onload = () => resolve();
+        img.onerror = () => resolve();
+        img.src = src;
+        if (img.complete) {
+          resolve();
+        }
+      });
+
+    const runLoader = async () => {
+      await Promise.all(
+        images.map((image) => preloadImage(responsiveSrc(image.src)))
+      );
+
+      if (cancelled) return;
+
+      const elapsed = performance.now() - loaderStartTime;
+      const isFastPath = elapsed < 320;
+      const minimumLoaderTimeMs = isFastPath ? 320 : 950;
+      const exitAnimationMs = isFastPath ? 320 : 520;
+      if (elapsed < minimumLoaderTimeMs) {
+        await wait(minimumLoaderTimeMs - elapsed);
+      }
+      if (cancelled) return;
+
+      setIsSubpageLoaderExiting(true);
+
+      exitTimer = setTimeout(() => {
+        if (cancelled) return;
+        setShowSubpageLoader(false);
+      }, exitAnimationMs);
+    };
+
+    runLoader();
+
+    return () => {
+      cancelled = true;
+      if (exitTimer) {
+        clearTimeout(exitTimer);
+      }
+    };
+  }, [currentCategory, images]);
+
+  useEffect(() => {
+    if (!showSubpageLoader) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [showSubpageLoader]);
+
   const preloadImage = (src: string) => {
     if (typeof window === "undefined") return;
     const img = new Image();
@@ -94,6 +168,8 @@ export default function CategoryGallery({
   useEffect(() => {
     squareTimeoutsRef.current.forEach((timeoutId) => clearTimeout(timeoutId));
     squareTimeoutsRef.current.clear();
+    squareTimeoutsByKeyRef.current.clear();
+    revealPassesByKeyRef.current.clear();
     setSelectedPhotoSrc(
       images[Math.floor(Math.random() * images.length)]?.src ??
         "/photos/Bridge.png"
@@ -106,6 +182,8 @@ export default function CategoryGallery({
     return () => {
       squareTimeoutsRef.current.forEach((timeoutId) => clearTimeout(timeoutId));
       squareTimeoutsRef.current.clear();
+      squareTimeoutsByKeyRef.current.clear();
+      revealPassesByKeyRef.current.clear();
     };
   }, []);
 
@@ -247,9 +325,9 @@ export default function CategoryGallery({
   }, [drawLayer]);
 
   useEffect(() => {
-    const removeSquareById = (squareId: string) => {
+    const removeSquareByKey = (squareKey: string) => {
       setRevealedSquares((prev) =>
-        prev.filter((square) => square.id !== squareId)
+        prev.filter((square) => square.key !== squareKey)
       );
     };
 
@@ -297,18 +375,71 @@ export default function CategoryGallery({
         return;
       }
 
-      squareCounter.current += 1;
-      const squareId = `square-${squareCounter.current}`;
-      const timeoutId = setTimeout(() => {
-        squareTimeoutsRef.current.delete(timeoutId);
-        removeSquareById(squareId);
-      }, disappearDelay);
-      squareTimeoutsRef.current.add(timeoutId);
+      const relativeX = Math.max(0, x - imageLeft);
+      const relativeY = Math.max(0, y - imageTop);
+      const maxColumn = Math.max(
+        0,
+        Math.ceil(drawLayerRef.current.width / squareSize) - 1
+      );
+      const maxRow = Math.max(
+        0,
+        Math.ceil(drawLayerRef.current.height / squareSize) - 1
+      );
+      const column = Math.min(maxColumn, Math.floor(relativeX / squareSize));
+      const row = Math.min(maxRow, Math.floor(relativeY / squareSize));
+      const squareKey = `${column}-${row}`;
+      const snappedX = imageLeft + column * squareSize;
+      const snappedY = imageTop + row * squareSize;
 
-      setRevealedSquares((prev) => [
-        ...prev,
-        { x: centerX, y: centerY, id: squareId, timeoutId }
-      ]);
+      const nextPassCount = (revealPassesByKeyRef.current.get(squareKey) ?? 0) + 1;
+      revealPassesByKeyRef.current.set(squareKey, nextPassCount);
+      const shouldPersist = nextPassCount >= 2;
+
+      const activeTimeout = squareTimeoutsByKeyRef.current.get(squareKey);
+      if (activeTimeout) {
+        clearTimeout(activeTimeout);
+        squareTimeoutsRef.current.delete(activeTimeout);
+        squareTimeoutsByKeyRef.current.delete(squareKey);
+      }
+
+      setRevealedSquares((prev) => {
+        const existing = prev.find((square) => square.key === squareKey);
+
+        if (existing) {
+          return prev.map((square) =>
+            square.key === squareKey
+              ? {
+                  ...square,
+                  x: snappedX,
+                  y: snappedY,
+                  permanent: square.permanent || shouldPersist
+                }
+              : square
+          );
+        }
+
+        squareCounter.current += 1;
+        return [
+          ...prev,
+          {
+            x: snappedX,
+            y: snappedY,
+            id: `square-${squareCounter.current}`,
+            key: squareKey,
+            permanent: shouldPersist
+          }
+        ];
+      });
+
+      if (!shouldPersist) {
+        const timeoutId = setTimeout(() => {
+          squareTimeoutsRef.current.delete(timeoutId);
+          squareTimeoutsByKeyRef.current.delete(squareKey);
+          removeSquareByKey(squareKey);
+        }, disappearDelay);
+        squareTimeoutsRef.current.add(timeoutId);
+        squareTimeoutsByKeyRef.current.set(squareKey, timeoutId);
+      }
     };
 
     const handleMouseMove = (event: MouseEvent) => {
@@ -511,7 +642,7 @@ export default function CategoryGallery({
           aria-label={`${currentCategory} paintbrush reveal`}
         >
           <div className="category-brush-stage category-brush-page" ref={stageRef}>
-            <p className="category-brush-instruction">Touch or click and drag to reveal the image.</p>
+            <p className="category-brush-instruction">Click &amp; Drag to Reveal the Image.</p>
 
             {revealedSquares.map((square) => {
               return (
@@ -566,6 +697,19 @@ export default function CategoryGallery({
         </section>
       </main>
       <SubpageFooter links={SUBPAGE_FOOTER_LINKS} />
+
+      {showSubpageLoader ? (
+        <div
+          className={`subpage-loading-screen${
+            isSubpageLoaderExiting ? " is-exiting" : ""
+          }`}
+          role="status"
+          aria-live="polite"
+          aria-label={`Loading ${currentCategory}`}
+        >
+          <h2 className="subpage-loading-title">{currentCategory}</h2>
+        </div>
+      ) : null}
 
       {lightbox && (
         <div className="lightbox" role="dialog" aria-modal="true">

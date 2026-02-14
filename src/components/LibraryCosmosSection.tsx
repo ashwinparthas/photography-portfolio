@@ -559,7 +559,7 @@ export default function LibraryCosmosSection({
             </div>
 
             <div className="library-instruction library-overlay-box" aria-hidden="true">
-              <span>Drag to View Images</span>
+              <span>Click &amp; Drag the Background</span>
             </div>
 
             <div className="library-position library-overlay-box" aria-hidden="true">

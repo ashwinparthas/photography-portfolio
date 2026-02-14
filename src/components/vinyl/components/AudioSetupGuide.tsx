@@ -12,7 +12,7 @@ export function AudioSetupGuide({ isVisible, onClose }: AudioSetupGuideProps) {
     { file: "gravity.mp3", song: "Gravity", album: "WASTELAND" },
     { file: "vivid-dreams.mp3", song: "VIVID DREAMS", album: "99.9%" },
     { file: "hereditary.mp3", song: "Hereditary", album: "The Never Story" },
-    { file: "being-so-normal.mp3", song: "Being so Normal", album: "Being So Normal" },
+    { file: "being-so-normal.mp3", song: "Being So Normal", album: "Being So Normal" },
     { file: "fallen.mp3", song: "Fallen", album: "Moodring" }
   ];
 

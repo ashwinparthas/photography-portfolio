@@ -324,7 +324,7 @@ const getMusicLibrary = () => {
       duration: 243,
     },
     being_so_normal: {
-      title: "Being so Normal",
+      title: "Being So Normal",
       artist: "Peach Pit",
       sources: [withBasePath("/songs/being-so-normal.mp3")],
       duration: 220,
