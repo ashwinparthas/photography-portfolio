@@ -973,7 +973,9 @@ img {
 
 .library-instruction {
   top: 20px;
-  min-width: 214px;
+  min-width: 0;
+  width: fit-content;
+  max-width: calc(100% - 128px);
   padding: 14px 18px;
   font-size: 16px;
   letter-spacing: 0.05em;
@@ -984,25 +986,27 @@ img {
   right: 20px;
   bottom: 20px;
   display: grid;
-  gap: 6px;
+  gap: 8px;
   z-index: 4;
+  pointer-events: auto;
 }
 
 .library-zoom-button {
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.2);
   background: rgba(12, 16, 22, 0.68);
   backdrop-filter: blur(4px);
   color: rgba(255, 255, 255, 0.92);
-  font-size: 18px;
+  font-size: 22px;
   line-height: 1;
   font-family: var(--font-body), "Helvetica Neue", Arial, sans-serif;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
+  touch-action: manipulation;
 }
 
 .library-zoom-button:hover:not(:disabled) {
@@ -1049,22 +1053,24 @@ img {
 
   .library-instruction {
     top: 12px;
-    min-width: 178px;
+    min-width: 0;
+    width: fit-content;
     padding: 11px 14px;
     font-size: 14px;
+    max-width: calc(100% - 112px);
   }
 
   .library-zoom-controls {
     right: 12px;
     bottom: 12px;
-    gap: 5px;
+    gap: 6px;
   }
 
   .library-zoom-button {
-    width: 30px;
-    height: 30px;
-    font-size: 16px;
-    border-radius: 9px;
+    width: 38px;
+    height: 38px;
+    font-size: 18px;
+    border-radius: 10px;
   }
 }
 
@@ -2276,14 +2282,14 @@ img {
   .library-zoom-controls {
     right: 10px;
     bottom: 10px;
-    gap: 4px;
+    gap: 5px;
   }
 
   .library-zoom-button {
-    width: 28px;
-    height: 28px;
-    font-size: 14px;
-    border-radius: 8px;
+    width: 36px;
+    height: 36px;
+    font-size: 17px;
+    border-radius: 9px;
   }
 
   .vinyl-entry {

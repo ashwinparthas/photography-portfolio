@@ -4,11 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import SubpageHeader from "@/components/SubpageHeader";
 import SubpageFooter from "@/components/SubpageFooter";
 import { withBasePath } from "@/lib/basePath";
-import {
-  fallbackToOriginalImage,
-  responsiveSrc,
-  responsiveSrcSet
-} from "@/lib/responsiveImage";
+import { responsiveSrc, responsiveSrcSet } from "@/lib/responsiveImage";
 
 type ImageItem = {
   src: string;
@@ -650,9 +646,6 @@ export default function CategoryGallery({
                   alt={image.alt}
                   loading={index < 1 ? "eager" : "lazy"}
                   decoding="async"
-                  onError={(event) =>
-                    fallbackToOriginalImage(event.currentTarget, image.src)
-                  }
                 />
                 <button
                   type="button"
@@ -801,12 +794,6 @@ export default function CategoryGallery({
               alt={images[lightbox.index].alt}
               loading="eager"
               decoding="async"
-              onError={(event) =>
-                fallbackToOriginalImage(
-                  event.currentTarget,
-                  images[lightbox.index].src
-                )
-              }
             />
           </figure>
         </div>

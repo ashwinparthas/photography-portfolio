@@ -4,11 +4,7 @@ import dynamic from "next/dynamic";
 import { useEffect, useRef, useState } from "react";
 import CollectionsDropdown from "@/components/CollectionsDropdown";
 import SubpageFooter from "@/components/SubpageFooter";
-import {
-  fallbackToOriginalImage,
-  responsiveSrc,
-  responsiveSrcSet
-} from "@/lib/responsiveImage";
+import { responsiveSrc, responsiveSrcSet } from "@/lib/responsiveImage";
 import { FEATURED_PHOTOS } from "@/lib/photoData";
 import { withBasePath } from "@/lib/basePath";
 
@@ -222,7 +218,7 @@ export default function Home() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (!("IntersectionObserver" in window)) {
+    if (typeof window.IntersectionObserver === "undefined") {
       const fallbackTimer = window.setTimeout(() => {
         setShowLibrarySection(true);
         setShowJukeboxSection(true);
@@ -485,9 +481,6 @@ export default function Home() {
                     alt={photo.title}
                     loading={index < 1 ? "eager" : "lazy"}
                     decoding="async"
-                    onError={(event) =>
-                      fallbackToOriginalImage(event.currentTarget, photo.src)
-                    }
                   />
                   <button
                     type="button"
@@ -599,12 +592,6 @@ export default function Home() {
               alt={FEATURED_PHOTOS[heroLightbox.index].title}
               loading="eager"
               decoding="async"
-              onError={(event) =>
-                fallbackToOriginalImage(
-                  event.currentTarget,
-                  FEATURED_PHOTOS[heroLightbox.index].src
-                )
-              }
             />
           </figure>
         </div>
