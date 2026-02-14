@@ -748,8 +748,8 @@ img {
   margin-left: 0;
   padding: 6px 0 20px;
   position: relative;
-  height: clamp(500px, 92svh, 1000px);
-  min-height: 420px;
+  height: clamp(560px, 94svh, 1120px);
+  min-height: 500px;
   box-sizing: border-box;
   background: transparent;
 }
@@ -793,9 +793,9 @@ img {
 
 .library-viewport-shell {
   position: relative;
-  width: 760px;
-  height: 900px;
-  min-height: 240px;
+  width: min(960px, 100%);
+  height: 980px;
+  min-height: 300px;
   align-self: center;
   max-width: 100%;
   max-height: 100%;
@@ -1023,8 +1023,8 @@ img {
 @media (max-width: 720px) {
   .library-cosmos {
     padding: 10px 0 16px;
-    height: clamp(360px, 74svh, 700px);
-    min-height: 340px;
+    height: clamp(400px, 78svh, 760px);
+    min-height: 360px;
   }
 
   .library-canvas-stage {
@@ -1034,7 +1034,7 @@ img {
   .library-viewport-shell {
     width: min(680px, 100%);
     height: 100%;
-    min-height: 260px;
+    min-height: 280px;
   }
 
   .library-overlay-box {
@@ -2134,14 +2134,14 @@ img {
 
   .library-cosmos {
     padding: 10px 0 14px;
-    height: clamp(380px, 72svh, 640px);
-    min-height: 340px;
+    height: clamp(440px, 78svh, 760px);
+    min-height: 380px;
   }
 
   .library-viewport-shell {
     width: min(680px, 100%);
     height: 100%;
-    min-height: 300px;
+    min-height: 320px;
   }
 
   .library-instruction {
@@ -2180,8 +2180,8 @@ img {
 
 @media (max-height: 760px) and (min-width: 901px) {
   .library-cosmos {
-    height: clamp(420px, 80svh, 760px);
-    min-height: 380px;
+    height: clamp(460px, 84svh, 860px);
+    min-height: 420px;
   }
 
   .library-canvas-stage {
@@ -2189,7 +2189,7 @@ img {
   }
 
   .library-viewport-shell {
-    min-height: 280px;
+    min-height: 320px;
   }
 
   .library-overlay-box {
@@ -2243,8 +2243,8 @@ img {
 
   .library-cosmos {
     padding: 8px 0 10px;
-    height: clamp(320px, 66svh, 520px);
-    min-height: 300px;
+    height: clamp(360px, 70svh, 560px);
+    min-height: 320px;
   }
 
   .library-canvas-stage {
@@ -2254,7 +2254,7 @@ img {
   .library-viewport-shell {
     width: min(960px, 100%);
     height: 100%;
-    min-height: 240px;
+    min-height: 260px;
   }
 
   .library-overlay-box {

@@ -4,7 +4,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, useMotionValue } from "motion/react";
 import { PatternCanvas } from "@/components/halftone/PatternCanvas";
 import { ALL_ALBUMS } from "@/lib/photoData";
-import { responsiveSrc, responsiveSrcSet } from "@/lib/responsiveImage";
+import {
+  fallbackToOriginalImage,
+  responsiveSrc,
+  responsiveSrcSet
+} from "@/lib/responsiveImage";
 import { withBasePath } from "@/lib/basePath";
 
 type DynamicAlbumCard = {
@@ -55,9 +59,11 @@ const HALFTONE_DENSITY = 35;
 const HALFTONE_SIZE = 35;
 const HALFTONE_INTENSITY = 65;
 const HALFTONE_SPEED = 1.2;
-const MIN_ZOOM = 1;
+const ABSOLUTE_MIN_ZOOM = 0.22;
 const MAX_ZOOM = 2.4;
 const ZOOM_STEP = 0.2;
+const ZOOM_OUT_DURATION_MS = 360;
+const ZOOM_IN_DURATION_MS = 250;
 
 const TEMPLATE_CANVAS_WIDTH = 2400;
 const TEMPLATE_CANVAS_HEIGHT = 1800;
@@ -174,6 +180,7 @@ export default function LibraryCosmosSection({
     x: 500,
     y: 400
   });
+  const zoomAnimationFrameRef = useRef(0);
   const canvasX = useMotionValue(0);
   const canvasY = useMotionValue(0);
   const [lightbox, setLightbox] = useState<{ index: number } | null>(null);
@@ -186,6 +193,15 @@ export default function LibraryCosmosSection({
   const [cursorHoveringNode, setCursorHoveringNode] = useState(false);
   const [cursorPosition, setCursorPosition] = useState({ x: 0, y: 0 });
   const [zoomLevel, setZoomLevel] = useState(1);
+  const fitToViewportZoom = useMemo(() => {
+    const fitByWidth = viewport.width / layout.canvasWidth;
+    const fitByHeight = viewport.height / layout.canvasHeight;
+    return Math.min(fitByWidth, fitByHeight);
+  }, [layout.canvasHeight, layout.canvasWidth, viewport.height, viewport.width]);
+  const minZoomLevel = useMemo(
+    () => clamp(Number((fitToViewportZoom * 0.98).toFixed(2)), ABSOLUTE_MIN_ZOOM, 1),
+    [fitToViewportZoom]
+  );
   const maxOffsetX = Math.max(0, layout.canvasWidth * zoomLevel - viewport.width);
   const maxOffsetY = Math.max(0, layout.canvasHeight * zoomLevel - viewport.height);
 
@@ -230,24 +246,34 @@ export default function LibraryCosmosSection({
     [maxOffsetX, maxOffsetY, viewport.height, viewport.width, zoomLevel]
   );
 
+  const stopZoomAnimation = useCallback(() => {
+    if (!zoomAnimationFrameRef.current) return;
+    cancelAnimationFrame(zoomAnimationFrameRef.current);
+    zoomAnimationFrameRef.current = 0;
+  }, []);
+
   const handleDrag = useCallback(
     (_event: MouseEvent | TouchEvent | PointerEvent, _info: DragInfo) => {
+      stopZoomAnimation();
       updateViewportPosition(canvasX.get(), canvasY.get());
     },
-    [canvasX, canvasY, updateViewportPosition]
+    [canvasX, canvasY, stopZoomAnimation, updateViewportPosition]
   );
 
   const applyZoom = useCallback(
     (nextZoom: number) => {
-      const normalizedZoom = clamp(nextZoom, MIN_ZOOM, MAX_ZOOM);
-      if (Math.abs(normalizedZoom - zoomLevel) < 0.0001) return;
+      const currentZoom = zoomLevel;
+      const normalizedZoom = clamp(nextZoom, minZoomLevel, MAX_ZOOM);
+      if (Math.abs(normalizedZoom - currentZoom) < 0.0001) return;
+
+      stopZoomAnimation();
 
       const currentOffsetX = canvasX.get();
       const currentOffsetY = canvasY.get();
       const visibleX = clamp(-currentOffsetX, 0, maxOffsetX);
       const visibleY = clamp(-currentOffsetY, 0, maxOffsetY);
-      const centerX = visibleX / zoomLevel + viewport.width / (2 * zoomLevel);
-      const centerY = visibleY / zoomLevel + viewport.height / (2 * zoomLevel);
+      const centerX = visibleX / currentZoom + viewport.width / (2 * currentZoom);
+      const centerY = visibleY / currentZoom + viewport.height / (2 * currentZoom);
 
       const nextMaxOffsetX = Math.max(
         0,
@@ -262,17 +288,58 @@ export default function LibraryCosmosSection({
       const nextVisibleY = centerY * normalizedZoom - viewport.height / 2;
       const nextOffsetX = -clamp(nextVisibleX, 0, nextMaxOffsetX);
       const nextOffsetY = -clamp(nextVisibleY, 0, nextMaxOffsetY);
+      const zoomDelta = Math.abs(normalizedZoom - currentZoom);
+      const durationMs =
+        normalizedZoom < currentZoom ? ZOOM_OUT_DURATION_MS : ZOOM_IN_DURATION_MS;
+      const adjustedDuration = durationMs + Math.min(140, zoomDelta * 240);
+      const animationStart = performance.now();
+      const easeOutCubic = (value: number) => 1 - Math.pow(1 - value, 3);
 
-      canvasX.set(nextOffsetX);
-      canvasY.set(nextOffsetY);
-      setZoomLevel(normalizedZoom);
-      updateViewportPosition(
-        nextOffsetX,
-        nextOffsetY,
-        normalizedZoom,
-        nextMaxOffsetX,
-        nextMaxOffsetY
-      );
+      const animateZoom = (now: number) => {
+        const progress = Math.min(1, (now - animationStart) / adjustedDuration);
+        const eased = easeOutCubic(progress);
+        const frameZoom = currentZoom + (normalizedZoom - currentZoom) * eased;
+        const frameOffsetX = currentOffsetX + (nextOffsetX - currentOffsetX) * eased;
+        const frameOffsetY = currentOffsetY + (nextOffsetY - currentOffsetY) * eased;
+        const frameMaxOffsetX = Math.max(
+          0,
+          layout.canvasWidth * frameZoom - viewport.width
+        );
+        const frameMaxOffsetY = Math.max(
+          0,
+          layout.canvasHeight * frameZoom - viewport.height
+        );
+
+        canvasX.set(frameOffsetX);
+        canvasY.set(frameOffsetY);
+        setZoomLevel(frameZoom);
+        updateViewportPosition(
+          frameOffsetX,
+          frameOffsetY,
+          frameZoom,
+          frameMaxOffsetX,
+          frameMaxOffsetY
+        );
+
+        if (progress >= 1) {
+          zoomAnimationFrameRef.current = 0;
+          canvasX.set(nextOffsetX);
+          canvasY.set(nextOffsetY);
+          setZoomLevel(normalizedZoom);
+          updateViewportPosition(
+            nextOffsetX,
+            nextOffsetY,
+            normalizedZoom,
+            nextMaxOffsetX,
+            nextMaxOffsetY
+          );
+          return;
+        }
+
+        zoomAnimationFrameRef.current = requestAnimationFrame(animateZoom);
+      };
+
+      zoomAnimationFrameRef.current = requestAnimationFrame(animateZoom);
     },
     [
       canvasX,
@@ -281,6 +348,8 @@ export default function LibraryCosmosSection({
       layout.canvasWidth,
       maxOffsetX,
       maxOffsetY,
+      minZoomLevel,
+      stopZoomAnimation,
       updateViewportPosition,
       viewport.height,
       viewport.width,
@@ -289,7 +358,7 @@ export default function LibraryCosmosSection({
   );
 
   const canZoomIn = zoomLevel < MAX_ZOOM - 0.0001;
-  const canZoomOut = zoomLevel > MIN_ZOOM + 0.0001;
+  const canZoomOut = zoomLevel > minZoomLevel + 0.0001;
 
   useEffect(() => {
     if (!lightbox) {
@@ -329,15 +398,17 @@ export default function LibraryCosmosSection({
   }, []);
 
   useEffect(() => {
+    stopZoomAnimation();
     canvasX.set(0);
     canvasY.set(0);
     setCanvasPosition({
       x: viewport.width / 2,
       y: viewport.height / 2
     });
-  }, [canvasX, canvasY, viewport.height, viewport.width]);
+  }, [canvasX, canvasY, stopZoomAnimation, viewport.height, viewport.width]);
 
   useEffect(() => {
+    stopZoomAnimation();
     const nextX = clamp(canvasX.get(), -maxOffsetX, 0);
     const nextY = clamp(canvasY.get(), -maxOffsetY, 0);
     if (nextX !== canvasX.get()) {
@@ -347,7 +418,13 @@ export default function LibraryCosmosSection({
       canvasY.set(nextY);
     }
     updateViewportPosition(nextX, nextY);
-  }, [canvasX, canvasY, maxOffsetX, maxOffsetY, updateViewportPosition]);
+  }, [canvasX, canvasY, maxOffsetX, maxOffsetY, stopZoomAnimation, updateViewportPosition]);
+
+  useEffect(() => {
+    return () => {
+      stopZoomAnimation();
+    };
+  }, [stopZoomAnimation]);
 
   const dragConstraints = useMemo(
     () => ({
@@ -545,6 +622,9 @@ export default function LibraryCosmosSection({
                           alt={album.title}
                           loading={order < 10 ? "eager" : "lazy"}
                           decoding="async"
+                          onError={(event) =>
+                            fallbackToOriginalImage(event.currentTarget, album.src)
+                          }
                         />
                       </div>
                       <span className="library-node-title">
@@ -673,6 +753,12 @@ export default function LibraryCosmosSection({
               alt={albums[lightbox.index].title}
               loading="eager"
               decoding="async"
+              onError={(event) =>
+                fallbackToOriginalImage(
+                  event.currentTarget,
+                  albums[lightbox.index].src
+                )
+              }
             />
           </figure>
         </div>

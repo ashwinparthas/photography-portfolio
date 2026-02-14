@@ -24,3 +24,16 @@ export const responsiveSrc = (src: string) =>
 
 export const responsiveSrcSet = (src: string) =>
   `${responsiveSrc(src)} 1x`;
+
+export const fallbackToOriginalImage = (
+  image: HTMLImageElement,
+  originalSrc: string
+) => {
+  if (image.dataset.originalFallbackApplied === "1") {
+    return;
+  }
+
+  image.dataset.originalFallbackApplied = "1";
+  image.src = withBasePath(originalSrc);
+  image.srcset = "";
+};

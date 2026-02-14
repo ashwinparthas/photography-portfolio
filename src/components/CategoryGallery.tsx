@@ -4,7 +4,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import SubpageHeader from "@/components/SubpageHeader";
 import SubpageFooter from "@/components/SubpageFooter";
 import { withBasePath } from "@/lib/basePath";
-import { responsiveSrc, responsiveSrcSet } from "@/lib/responsiveImage";
+import {
+  fallbackToOriginalImage,
+  responsiveSrc,
+  responsiveSrcSet
+} from "@/lib/responsiveImage";
 
 type ImageItem = {
   src: string;
@@ -36,6 +40,8 @@ type CategoryGalleryProps = {
 };
 
 const SUBPAGE_FOOTER_LINKS = [{ label: "Reveal It", href: "#reveal" }];
+const SUBPAGE_LOADER_SESSION_PREFIX = "subpage-loader-warm-v1";
+const CRITICAL_SUBPAGE_PRELOAD_COUNT = 4;
 
 const CURSOR_DOTS = Array.from({ length: 14 }, (_, index) => {
   const angle = (index / 14) * Math.PI * 2;
@@ -92,41 +98,68 @@ export default function CategoryGallery({
   );
   const drawImage = useMemo(() => withBasePath(selectedPhotoSrc), [selectedPhotoSrc]);
 
+  const preloadResponsiveImage = (src: string) =>
+    new Promise<void>((resolve) => {
+      const img = new Image();
+      img.decoding = "async";
+      img.onload = () => resolve();
+      img.onerror = () => resolve();
+      img.src = responsiveSrc(src);
+      if (img.complete) {
+        resolve();
+      }
+    });
+
+  const warmImage = (src: string) => {
+    if (typeof window === "undefined") return;
+    const img = new Image();
+    img.decoding = "async";
+    img.src = responsiveSrc(src);
+  };
+
   useEffect(() => {
     if (typeof window === "undefined") return;
 
     let cancelled = false;
     let exitTimer: ReturnType<typeof setTimeout> | null = null;
     const loaderStartTime = performance.now();
+    const sessionKey = `${SUBPAGE_LOADER_SESSION_PREFIX}:${currentCategory.toLowerCase()}`;
+    const isWarmSession = (() => {
+      try {
+        return sessionStorage.getItem(sessionKey) === "1";
+      } catch {
+        return false;
+      }
+    })();
 
     const wait = (durationMs: number) =>
       new Promise<void>((resolve) => {
         setTimeout(resolve, durationMs);
       });
 
-    const preloadImage = (src: string) =>
-      new Promise<void>((resolve) => {
-        const img = new Image();
-        img.decoding = "async";
-        img.onload = () => resolve();
-        img.onerror = () => resolve();
-        img.src = src;
-        if (img.complete) {
-          resolve();
-        }
-      });
-
     const runLoader = async () => {
-      await Promise.all(
-        images.map((image) => preloadImage(responsiveSrc(image.src)))
+      const criticalImages = images.slice(
+        0,
+        Math.min(CRITICAL_SUBPAGE_PRELOAD_COUNT, images.length)
       );
+      await Promise.race([
+        Promise.all(
+          criticalImages.map((image) => preloadResponsiveImage(image.src))
+        ),
+        wait(isWarmSession ? 160 : 760)
+      ]);
 
       if (cancelled) return;
+      try {
+        sessionStorage.setItem(sessionKey, "1");
+      } catch {
+        // Ignore storage failures in private/session-restricted environments.
+      }
 
       const elapsed = performance.now() - loaderStartTime;
-      const isFastPath = elapsed < 320;
-      const minimumLoaderTimeMs = isFastPath ? 320 : 950;
-      const exitAnimationMs = isFastPath ? 320 : 520;
+      const isFastPath = elapsed < (isWarmSession ? 140 : 320);
+      const minimumLoaderTimeMs = isFastPath ? 180 : 460;
+      const exitAnimationMs = isFastPath ? 170 : 320;
       if (elapsed < minimumLoaderTimeMs) {
         await wait(minimumLoaderTimeMs - elapsed);
       }
@@ -151,6 +184,18 @@ export default function CategoryGallery({
   }, [currentCategory, images]);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    const timer = window.setTimeout(() => {
+      images
+        .slice(CRITICAL_SUBPAGE_PRELOAD_COUNT)
+        .forEach((image) => warmImage(image.src));
+    }, 420);
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [currentCategory, images]);
+
+  useEffect(() => {
     if (!showSubpageLoader) return;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -158,12 +203,6 @@ export default function CategoryGallery({
       document.body.style.overflow = previousOverflow;
     };
   }, [showSubpageLoader]);
-
-  const preloadImage = (src: string) => {
-    if (typeof window === "undefined") return;
-    const img = new Image();
-    img.src = responsiveSrc(src);
-  };
 
   useEffect(() => {
     squareTimeoutsRef.current.forEach((timeoutId) => clearTimeout(timeoutId));
@@ -227,8 +266,8 @@ export default function CategoryGallery({
     if (!lightbox) return;
     const nextIndex = (lightbox.index + 1) % images.length;
     const prevIndex = (lightbox.index - 1 + images.length) % images.length;
-    preloadImage(images[nextIndex].src);
-    preloadImage(images[prevIndex].src);
+    warmImage(images[nextIndex].src);
+    warmImage(images[prevIndex].src);
   }, [images, lightbox]);
 
   useEffect(() => {
@@ -611,6 +650,9 @@ export default function CategoryGallery({
                   alt={image.alt}
                   loading={index < 1 ? "eager" : "lazy"}
                   decoding="async"
+                  onError={(event) =>
+                    fallbackToOriginalImage(event.currentTarget, image.src)
+                  }
                 />
                 <button
                   type="button"
@@ -759,6 +801,12 @@ export default function CategoryGallery({
               alt={images[lightbox.index].alt}
               loading="eager"
               decoding="async"
+              onError={(event) =>
+                fallbackToOriginalImage(
+                  event.currentTarget,
+                  images[lightbox.index].src
+                )
+              }
             />
           </figure>
         </div>

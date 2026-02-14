@@ -1,15 +1,20 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useEffect, useRef, type MouseEvent } from "react";
 import CollectionsDropdown from "@/components/CollectionsDropdown";
-import FooterGradientShader from "@/components/FooterGradientShader";
 
 const CATEGORY_LINKS = [
   { label: "Landscape", href: "/landscape" },
   { label: "Nature", href: "/nature" },
   { label: "Street", href: "/street" }
 ] as const;
+
+const FooterGradientShader = dynamic(
+  () => import("@/components/FooterGradientShader"),
+  { ssr: false }
+);
 
 type SubpageHeaderProps = {
   pageLabel: string;

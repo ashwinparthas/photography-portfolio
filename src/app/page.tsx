@@ -1,12 +1,14 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useEffect, useRef, useState } from "react";
 import CollectionsDropdown from "@/components/CollectionsDropdown";
-import FooterGradientShader from "@/components/FooterGradientShader";
-import LibraryCosmosSection from "@/components/LibraryCosmosSection";
 import SubpageFooter from "@/components/SubpageFooter";
-import VinylPlayerSection from "@/components/VinylPlayerSection";
-import { responsiveSrc, responsiveSrcSet } from "@/lib/responsiveImage";
+import {
+  fallbackToOriginalImage,
+  responsiveSrc,
+  responsiveSrcSet
+} from "@/lib/responsiveImage";
 import { FEATURED_PHOTOS } from "@/lib/photoData";
 import { withBasePath } from "@/lib/basePath";
 
@@ -26,12 +28,45 @@ const HOME_FOOTER_LINKS = [
   { label: "Jukebox", href: "#jukebox" }
 ];
 
+const HOME_LOADER_SESSION_KEY = "home-loader-warm-v2";
+
+const LIBRARY_PLACEHOLDER_STYLE = {
+  minHeight: "clamp(500px, 92svh, 1000px)"
+} as const;
+
+const JUKEBOX_PLACEHOLDER_STYLE = {
+  minHeight: "clamp(540px, 92svh, 980px)"
+} as const;
+
+const FooterGradientShader = dynamic(
+  () => import("@/components/FooterGradientShader"),
+  { ssr: false }
+);
+
+const LibraryCosmosSection = dynamic(
+  () => import("@/components/LibraryCosmosSection"),
+  {
+    ssr: false,
+    loading: () => <div aria-hidden="true" style={LIBRARY_PLACEHOLDER_STYLE} />
+  }
+);
+
+const VinylPlayerSection = dynamic(
+  () => import("@/components/VinylPlayerSection"),
+  {
+    ssr: false,
+    loading: () => <div aria-hidden="true" style={JUKEBOX_PLACEHOLDER_STYLE} />
+  }
+);
+
 type HeroLightboxState = {
   index: number;
 };
 
 export default function Home() {
   const heroWheelRef = useRef<HTMLDivElement | null>(null);
+  const libraryMountRef = useRef<HTMLDivElement | null>(null);
+  const jukeboxMountRef = useRef<HTMLDivElement | null>(null);
   const scrollStateRef = useRef({
     target: 0,
     current: 0,
@@ -44,6 +79,8 @@ export default function Home() {
   const [isHd, setIsHd] = useState(false);
   const [showInitialLoader, setShowInitialLoader] = useState(true);
   const [isLoaderExiting, setIsLoaderExiting] = useState(false);
+  const [showLibrarySection, setShowLibrarySection] = useState(false);
+  const [showJukeboxSection, setShowJukeboxSection] = useState(false);
   const loaderProgressRef = useRef(0);
   const loaderFillRef = useRef<HTMLDivElement | null>(null);
 
@@ -61,8 +98,14 @@ export default function Home() {
     let completionFrame = 0;
     let exitTimer: ReturnType<typeof setTimeout> | null = null;
     const loaderStartTime = performance.now();
-    const likelyWarmPath = document.readyState === "complete";
-    const steadyFillDurationMs = likelyWarmPath ? 1500 : 2500;
+    const isWarmSession = (() => {
+      try {
+        return sessionStorage.getItem(HOME_LOADER_SESSION_KEY) === "1";
+      } catch {
+        return false;
+      }
+    })();
+    const steadyFillDurationMs = isWarmSession ? 700 : 1500;
 
     const wait = (durationMs: number) =>
       new Promise<void>((resolve) => {
@@ -74,25 +117,6 @@ export default function Home() {
       loaderProgressRef.current = clamped;
       if (loaderFillRef.current) {
         loaderFillRef.current.style.transform = `scaleX(${clamped / 100})`;
-      }
-    };
-
-    const waitForWindowLoad = () =>
-      new Promise<void>((resolve) => {
-        if (document.readyState === "complete") {
-          resolve();
-          return;
-        }
-        const onLoad = () => resolve();
-        window.addEventListener("load", onLoad, { once: true });
-      });
-
-    const waitForFonts = async () => {
-      if (!("fonts" in document)) return;
-      try {
-        await document.fonts.ready;
-      } catch {
-        // Ignore font wait failures; loading should continue.
       }
     };
 
@@ -123,21 +147,24 @@ export default function Home() {
 
       progressFrame = requestAnimationFrame(animateSteadyFill);
 
-      await Promise.all([
-        waitForWindowLoad(),
-        waitForFonts(),
-        Promise.all(
-          FEATURED_PHOTOS.slice(0, 6).map((photo) =>
-            preloadCriticalImage(responsiveSrc(photo.src))
-          )
-        )
-      ]);
+      const firstFeatured = FEATURED_PHOTOS[0];
+      if (firstFeatured) {
+        await Promise.race([
+          preloadCriticalImage(responsiveSrc(firstFeatured.src)),
+          wait(isWarmSession ? 180 : 850)
+        ]);
+      }
 
       if (cancelled) return;
+      try {
+        sessionStorage.setItem(HOME_LOADER_SESSION_KEY, "1");
+      } catch {
+        // Ignore storage failures in private/session-restricted environments.
+      }
 
       const elapsed = performance.now() - loaderStartTime;
-      const isFastPath = elapsed < 420;
-      const minimumLoaderTimeMs = isFastPath ? 460 : 1300;
+      const isFastPath = elapsed < (isWarmSession ? 160 : 420);
+      const minimumLoaderTimeMs = isFastPath ? 220 : 620;
       if (elapsed < minimumLoaderTimeMs) {
         await wait(minimumLoaderTimeMs - elapsed);
       }
@@ -148,8 +175,8 @@ export default function Home() {
       }
 
       const completionFrom = loaderProgressRef.current;
-      const completionDurationMs = isFastPath ? 280 : 700;
-      const exitDelayMs = isFastPath ? 150 : 340;
+      const completionDurationMs = isFastPath ? 170 : 360;
+      const exitDelayMs = isFastPath ? 80 : 180;
       const completionStart = performance.now();
       const completeProgress = (now: number) => {
         if (cancelled) return;
@@ -180,6 +207,63 @@ export default function Home() {
       if (progressFrame) cancelAnimationFrame(progressFrame);
       if (completionFrame) cancelAnimationFrame(completionFrame);
       if (exitTimer) clearTimeout(exitTimer);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const timer = window.setTimeout(() => {
+      FEATURED_PHOTOS.slice(1).forEach((photo) => preloadImage(photo.src));
+    }, 480);
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!("IntersectionObserver" in window)) {
+      const fallbackTimer = window.setTimeout(() => {
+        setShowLibrarySection(true);
+        setShowJukeboxSection(true);
+      }, 0);
+      return () => {
+        window.clearTimeout(fallbackTimer);
+      };
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (!entry.isIntersecting) return;
+          if (entry.target === libraryMountRef.current) {
+            setShowLibrarySection(true);
+            observer.unobserve(entry.target);
+            return;
+          }
+          if (entry.target === jukeboxMountRef.current) {
+            setShowJukeboxSection(true);
+            observer.unobserve(entry.target);
+          }
+        });
+      },
+      { rootMargin: "680px 0px" }
+    );
+
+    if (libraryMountRef.current) observer.observe(libraryMountRef.current);
+    if (jukeboxMountRef.current) observer.observe(jukeboxMountRef.current);
+
+    const libraryFallbackTimer = window.setTimeout(() => {
+      setShowLibrarySection(true);
+    }, 1500);
+    const jukeboxFallbackTimer = window.setTimeout(() => {
+      setShowJukeboxSection(true);
+    }, 2600);
+
+    return () => {
+      observer.disconnect();
+      window.clearTimeout(libraryFallbackTimer);
+      window.clearTimeout(jukeboxFallbackTimer);
     };
   }, []);
 
@@ -401,6 +485,9 @@ export default function Home() {
                     alt={photo.title}
                     loading={index < 1 ? "eager" : "lazy"}
                     decoding="async"
+                    onError={(event) =>
+                      fallbackToOriginalImage(event.currentTarget, photo.src)
+                    }
                   />
                   <button
                     type="button"
@@ -420,13 +507,23 @@ export default function Home() {
             <h2 className="artist-library-title">Library</h2>
           </section>
 
-          <LibraryCosmosSection className="artist-landing-library" />
+          <div ref={libraryMountRef} aria-hidden="true" />
+          {showLibrarySection ? (
+            <LibraryCosmosSection className="artist-landing-library" />
+          ) : (
+            <div aria-hidden="true" style={LIBRARY_PLACEHOLDER_STYLE} />
+          )}
 
           <section className="artist-jukebox-intro" id="jukebox" aria-label="Jukebox">
             <div className="artist-library-vinyl-rule" aria-hidden="true" />
             <h2 className="artist-library-title">Jukebox</h2>
           </section>
-          <VinylPlayerSection />
+          <div ref={jukeboxMountRef} aria-hidden="true" />
+          {showJukeboxSection ? (
+            <VinylPlayerSection />
+          ) : (
+            <div aria-hidden="true" style={JUKEBOX_PLACEHOLDER_STYLE} />
+          )}
           <SubpageFooter links={HOME_FOOTER_LINKS} />
         </section>
       </main>
@@ -502,6 +599,12 @@ export default function Home() {
               alt={FEATURED_PHOTOS[heroLightbox.index].title}
               loading="eager"
               decoding="async"
+              onError={(event) =>
+                fallbackToOriginalImage(
+                  event.currentTarget,
+                  FEATURED_PHOTOS[heroLightbox.index].src
+                )
+              }
             />
           </figure>
         </div>
