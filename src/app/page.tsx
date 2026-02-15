@@ -27,6 +27,7 @@ const HOME_FOOTER_LINKS = [
 const HOME_LOADER_SESSION_KEY = "home-loader-warm-v2";
 const MOBILE_HERO_LOADER_RATIO = 0.8;
 const MOBILE_HERO_LOADER_MIN_COUNT = 3;
+const MOBILE_SCROLL_WHEEL_RENDER_COUNT = 3;
 const getMobileHeroCriticalCount = () =>
   Math.min(
     FEATURED_PHOTOS.length,
@@ -94,6 +95,8 @@ export default function Home() {
   const heroImageRefsRef = useRef<Map<number, HTMLImageElement>>(new Map());
   const heroLoadedIndexesRef = useRef<Set<number>>(new Set());
   const heroCriticalCountRef = useRef(1);
+  const heroRenderReadyIndexesRef = useRef<Set<number>>(new Set());
+  const heroRenderCriticalCountRef = useRef(0);
   const isTouchMobileDevice =
     typeof window !== "undefined" &&
     window.matchMedia("(max-width: 900px) and (hover: none) and (pointer: coarse)")
@@ -110,6 +113,34 @@ export default function Home() {
     heroLoadedIndexesRef.current.add(index);
   }, []);
 
+  const markHeroImageRendered = useCallback((index: number) => {
+    if (index >= heroRenderCriticalCountRef.current) return;
+    heroRenderReadyIndexesRef.current.add(index);
+  }, []);
+
+  const queueHeroImageRenderedFromNode = useCallback(
+    (index: number, node: HTMLImageElement | null) => {
+      if (!node) return;
+      if (index >= heroRenderCriticalCountRef.current) return;
+      if (!node.complete || node.naturalWidth <= 0) return;
+
+      if (typeof node.decode === "function") {
+        node
+          .decode()
+          .catch(() => {
+            // decode() can fail in some browsers even when the image is usable.
+          })
+          .finally(() => {
+            markHeroImageRendered(index);
+          });
+        return;
+      }
+
+      markHeroImageRendered(index);
+    },
+    [markHeroImageRendered]
+  );
+
   const registerHeroImageRef = useCallback(
     (index: number, node: HTMLImageElement | null) => {
       if (!node) {
@@ -124,8 +155,15 @@ export default function Home() {
       ) {
         markHeroImageReady(index);
       }
+      if (
+        index < heroRenderCriticalCountRef.current &&
+        node.complete &&
+        node.naturalWidth > 0
+      ) {
+        queueHeroImageRenderedFromNode(index, node);
+      }
     },
-    [markHeroImageReady]
+    [markHeroImageReady, queueHeroImageRenderedFromNode]
   );
 
   const handleVinylReady = useCallback(() => {
@@ -167,8 +205,13 @@ export default function Home() {
           ? mobileHeroCriticalCount
           : 1
         : 0;
+    const criticalRenderedHeroImageCount = isMobileLoader
+      ? Math.min(FEATURED_PHOTOS.length, MOBILE_SCROLL_WHEEL_RENDER_COUNT)
+      : 0;
     heroCriticalCountRef.current = criticalHeroImageCount;
     heroLoadedIndexesRef.current = new Set();
+    heroRenderCriticalCountRef.current = criticalRenderedHeroImageCount;
+    heroRenderReadyIndexesRef.current = new Set();
     heroImageRefsRef.current.forEach((node, index) => {
       if (
         index < heroCriticalCountRef.current &&
@@ -176,6 +219,13 @@ export default function Home() {
         node.naturalWidth > 0
       ) {
         heroLoadedIndexesRef.current.add(index);
+      }
+      if (
+        index < heroRenderCriticalCountRef.current &&
+        node.complete &&
+        node.naturalWidth > 0
+      ) {
+        queueHeroImageRenderedFromNode(index, node);
       }
     });
     const steadyFillDurationMs = isWarmSession ? 1000 : 1900;
@@ -229,6 +279,12 @@ export default function Home() {
       return Math.min(1, heroLoadedIndexesRef.current.size / criticalCount);
     };
 
+    const getHeroRenderProgress = () => {
+      const criticalCount = heroRenderCriticalCountRef.current;
+      if (criticalCount <= 0) return 1;
+      return Math.min(1, heroRenderReadyIndexesRef.current.size / criticalCount);
+    };
+
     const waitForHeroArtifacts = (timeoutMs: number) => {
       if (getHeroArtifactProgress() >= 1) {
         return Promise.resolve();
@@ -261,6 +317,38 @@ export default function Home() {
       });
     };
 
+    const waitForHeroRenderedArtifacts = (timeoutMs: number) => {
+      if (getHeroRenderProgress() >= 1) {
+        return Promise.resolve();
+      }
+
+      return new Promise<void>((resolve) => {
+        let frame = 0;
+        let timeoutId = 0;
+
+        const finalize = () => {
+          if (frame) {
+            window.cancelAnimationFrame(frame);
+          }
+          if (timeoutId) {
+            window.clearTimeout(timeoutId);
+          }
+          resolve();
+        };
+
+        const check = () => {
+          if (cancelled || getHeroRenderProgress() >= 1) {
+            finalize();
+            return;
+          }
+          frame = window.requestAnimationFrame(check);
+        };
+
+        timeoutId = window.setTimeout(finalize, timeoutMs);
+        frame = window.requestAnimationFrame(check);
+      });
+    };
+
     const runLoader = async () => {
       const animateSteadyFill = (now: number) => {
         if (cancelled) return;
@@ -269,10 +357,14 @@ export default function Home() {
         let target = 0;
         if (isMobileLoader) {
           const heroProgress = getHeroArtifactProgress();
+          const renderedHeroProgress = getHeroRenderProgress();
           const vinylProgress = vinylReadyRef.current ? 1 : 0;
           const warmupProgress = Math.min(1, elapsed / (isWarmSession ? 900 : 1800));
           const artifactProgress =
-            heroProgress * 0.72 + vinylProgress * 0.23 + warmupProgress * 0.05;
+            heroProgress * 0.56 +
+            renderedHeroProgress * 0.16 +
+            vinylProgress * 0.23 +
+            warmupProgress * 0.05;
           target = 4 + artifactProgress * 90;
         } else {
           const progressRatio = Math.min(1, elapsed / steadyFillDurationMs);
@@ -334,6 +426,7 @@ export default function Home() {
           ? wait(remainingMinimumDurationMs)
           : Promise.resolve(),
         waitForHeroArtifacts(artifactTimeoutMs),
+        waitForHeroRenderedArtifacts(artifactTimeoutMs),
         waitForVinylReady(artifactTimeoutMs)
       ]);
 
@@ -383,7 +476,7 @@ export default function Home() {
       vinylReadyWaitersRef.current = [];
       waiters.forEach((resolve) => resolve());
     };
-  }, [markHeroImageReady]);
+  }, [markHeroImageReady, queueHeroImageRenderedFromNode]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -661,7 +754,13 @@ export default function Home() {
                     loading={index < heroLoaderImageCount ? "eager" : "lazy"}
                     decoding="async"
                     ref={(node) => registerHeroImageRef(index, node)}
-                    onLoad={() => markHeroImageReady(index)}
+                    onLoad={() => {
+                      markHeroImageReady(index);
+                      queueHeroImageRenderedFromNode(
+                        index,
+                        heroImageRefsRef.current.get(index) ?? null
+                      );
+                    }}
                     onError={() => markHeroImageReady(index)}
                   />
                   <button
