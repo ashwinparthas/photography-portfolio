@@ -58,12 +58,17 @@ export default function SubpageFooter({
 
     const startY = window.scrollY;
     const distance = targetY - startY;
-    const durationMs = Math.min(1600, Math.max(700, Math.abs(distance) * 0.55));
+    const distanceAbs = Math.abs(distance);
+
+    if (distanceAbs < 1) {
+      window.history.pushState(null, "", hash);
+      return;
+    }
+
+    const durationMs = Math.min(3200, Math.max(1100, distanceAbs * 1.05));
     const startTime = performance.now();
-    const easeInOutCubic = (progress: number) =>
-      progress < 0.5
-        ? 4 * progress * progress * progress
-        : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+    const easeInOutSine = (progress: number) =>
+      -(Math.cos(Math.PI * progress) - 1) / 2;
     let interrupted = false;
 
     const stopOnInteraction = () => {
@@ -91,7 +96,7 @@ export default function SubpageFooter({
 
       const elapsed = currentTime - startTime;
       const progress = Math.min(elapsed / durationMs, 1);
-      const eased = easeInOutCubic(progress);
+      const eased = easeInOutSine(progress);
       window.scrollTo(0, startY + distance * eased);
 
       if (progress < 1) {

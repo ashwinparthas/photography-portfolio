@@ -56,8 +56,13 @@ export default function CategoryGallery({
   const [isSubpageLoaderExiting, setIsSubpageLoaderExiting] = useState(false);
   const [lightbox, setLightbox] = useState<LightboxState | null>(null);
   const [isHd, setIsHd] = useState(false);
-  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
   const [revealedSquares, setRevealedSquares] = useState<RevealedSquare[]>([]);
+  const [isRevealCelebrating, setIsRevealCelebrating] = useState(false);
+  const [isRevealComplete, setIsRevealComplete] = useState(false);
+  const [revealCompletionOrigin, setRevealCompletionOrigin] = useState({
+    x: 0,
+    y: 0
+  });
   const [imageBounds, setImageBounds] = useState<Rect>({
     x: 0,
     y: 0,
@@ -73,6 +78,9 @@ export default function CategoryGallery({
   });
 
   const stageRef = useRef<HTMLDivElement | null>(null);
+  const cursorRef = useRef<HTMLDivElement | null>(null);
+  const cursorFrameRef = useRef<number>(0);
+  const pendingCursorPositionRef = useRef({ x: 0, y: 0 });
   const mousePositionRef = useRef({ x: 0, y: 0 });
   const isMouseDownRef = useRef(false);
   const drawLayerRef = useRef<Rect>({ x: 0, y: 0, width: 0, height: 0 });
@@ -84,6 +92,9 @@ export default function CategoryGallery({
     new Map()
   );
   const revealPassesByKeyRef = useRef<Map<string, number>>(new Map());
+  const permanentSquareKeysRef = useRef<Set<string>>(new Set());
+  const revealCompletionTriggeredRef = useRef(false);
+  const revealCelebrateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastTouchTimestampRef = useRef(0);
   const criticalTileRefsRef = useRef<Map<number, HTMLImageElement>>(new Map());
   const criticalRenderReadyRef = useRef(false);
@@ -97,10 +108,28 @@ export default function CategoryGallery({
   const squareSize = 108;
   const revealDistance = 25;
   const disappearDelay = 1000;
+  const revealLockDelayFactor = 1.6;
+  const revealLockDelayMaxMs = 3200;
+  const revealLockAnimationDurationMs = 3200;
   const [selectedPhotoSrc, setSelectedPhotoSrc] = useState(
     () => images[0]?.src ?? "/photos/Bridge.png"
   );
   const drawImage = useMemo(() => withBasePath(selectedPhotoSrc), [selectedPhotoSrc]);
+
+  const queueCursorPosition = useCallback((x: number, y: number) => {
+    mousePositionRef.current = { x, y };
+    pendingCursorPositionRef.current = { x, y };
+
+    if (cursorFrameRef.current) return;
+
+    cursorFrameRef.current = requestAnimationFrame(() => {
+      cursorFrameRef.current = 0;
+      const cursor = cursorRef.current;
+      if (!cursor) return;
+      const next = pendingCursorPositionRef.current;
+      cursor.style.transform = `translate3d(${next.x - 24}px, ${next.y - 24}px, 0)`;
+    });
+  }, []);
 
   const resolveCriticalRenderReady = useCallback(() => {
     if (criticalRenderReadyRef.current) return;
@@ -238,21 +267,21 @@ export default function CategoryGallery({
       }
 
       const elapsed = performance.now() - loaderStartTime;
-      const minimumLoaderTimeMs = isWarmSession ? 1500 : 2300;
+      const minimumLoaderTimeMs = isWarmSession ? 550 : 900;
       const remainingMinimumLoaderMs = Math.max(0, minimumLoaderTimeMs - elapsed);
       await Promise.all([
         remainingMinimumLoaderMs > 0
           ? wait(remainingMinimumLoaderMs)
           : Promise.resolve(),
-        waitForCriticalTileRender(isWarmSession ? 1200 : 2400)
+        waitForCriticalTileRender(isWarmSession ? 450 : 900)
       ]);
 
       if (cancelled) return;
-      await wait(isWarmSession ? 90 : 160);
+      await wait(isWarmSession ? 40 : 70);
       if (cancelled) return;
 
       setIsSubpageLoaderExiting(true);
-      const exitAnimationMs = isWarmSession ? 760 : 860;
+      const exitAnimationMs = isWarmSession ? 360 : 440;
 
       exitTimer = setTimeout(() => {
         if (cancelled) return;
@@ -299,10 +328,18 @@ export default function CategoryGallery({
     squareTimeoutsRef.current.clear();
     squareTimeoutsByKeyRef.current.clear();
     revealPassesByKeyRef.current.clear();
+    permanentSquareKeysRef.current.clear();
+    revealCompletionTriggeredRef.current = false;
+    setIsRevealCelebrating(false);
+    setIsRevealComplete(false);
+    setRevealCompletionOrigin({ x: 0, y: 0 });
     setSelectedPhotoSrc(
       images[Math.floor(Math.random() * images.length)]?.src ??
         "/photos/Bridge.png"
     );
+    if (cursorRef.current) {
+      cursorRef.current.style.transform = "translate3d(-120px, -120px, 0)";
+    }
     setRevealedSquares([]);
     squareCounter.current = 0;
   }, [currentCategory, images]);
@@ -313,6 +350,23 @@ export default function CategoryGallery({
       squareTimeoutsRef.current.clear();
       squareTimeoutsByKeyRef.current.clear();
       revealPassesByKeyRef.current.clear();
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (revealCelebrateTimeoutRef.current) {
+        clearTimeout(revealCelebrateTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (cursorFrameRef.current) {
+        cancelAnimationFrame(cursorFrameRef.current);
+        cursorFrameRef.current = 0;
+      }
     };
   }, []);
 
@@ -480,6 +534,10 @@ export default function CategoryGallery({
       toStagePositionFromClient(event.clientX, event.clientY);
 
     const revealSquareAtPosition = (x: number, y: number) => {
+      if (revealCompletionTriggeredRef.current) {
+        return;
+      }
+
       const centerX = x - squareSize / 2;
       const centerY = y - squareSize / 2;
 
@@ -524,6 +582,59 @@ export default function CategoryGallery({
       revealPassesByKeyRef.current.set(squareKey, nextPassCount);
       const shouldPersist = nextPassCount >= 2;
 
+      if (shouldPersist && !permanentSquareKeysRef.current.has(squareKey)) {
+        permanentSquareKeysRef.current.add(squareKey);
+
+        const totalSquares =
+          Math.ceil(drawLayerRef.current.width / squareSize) *
+          Math.ceil(drawLayerRef.current.height / squareSize);
+
+        if (
+          totalSquares > 0 &&
+          permanentSquareKeysRef.current.size >= totalSquares &&
+          !revealCompletionTriggeredRef.current
+        ) {
+          const completionOrigin = { x, y };
+          const layer = drawLayerRef.current;
+          const columns = Math.max(1, Math.ceil(layer.width / squareSize));
+          const rows = Math.max(1, Math.ceil(layer.height / squareSize));
+          let maxDistanceFromCompletion = 0;
+
+          for (let rowIndex = 0; rowIndex < rows; rowIndex += 1) {
+            for (let columnIndex = 0; columnIndex < columns; columnIndex += 1) {
+              const centerX = layer.x + columnIndex * squareSize + squareSize / 2;
+              const centerY = layer.y + rowIndex * squareSize + squareSize / 2;
+              const distance = Math.hypot(
+                centerX - completionOrigin.x,
+                centerY - completionOrigin.y
+              );
+              if (distance > maxDistanceFromCompletion) {
+                maxDistanceFromCompletion = distance;
+              }
+            }
+          }
+
+          const maxLockDelayMs = Math.min(
+            revealLockDelayMaxMs,
+            Math.round(maxDistanceFromCompletion * revealLockDelayFactor)
+          );
+          const revealCelebrateDurationMs =
+            maxLockDelayMs + revealLockAnimationDurationMs + 40;
+
+          revealCompletionTriggeredRef.current = true;
+          setRevealCompletionOrigin(completionOrigin);
+          setIsRevealComplete(true);
+          setIsRevealCelebrating(true);
+          if (revealCelebrateTimeoutRef.current) {
+            clearTimeout(revealCelebrateTimeoutRef.current);
+          }
+          revealCelebrateTimeoutRef.current = setTimeout(() => {
+            setIsRevealCelebrating(false);
+            revealCelebrateTimeoutRef.current = null;
+          }, revealCelebrateDurationMs);
+        }
+      }
+
       const activeTimeout = squareTimeoutsByKeyRef.current.get(squareKey);
       if (activeTimeout) {
         clearTimeout(activeTimeout);
@@ -532,19 +643,28 @@ export default function CategoryGallery({
       }
 
       setRevealedSquares((prev) => {
-        const existing = prev.find((square) => square.key === squareKey);
+        const existingIndex = prev.findIndex((square) => square.key === squareKey);
 
-        if (existing) {
-          return prev.map((square) =>
-            square.key === squareKey
-              ? {
-                  ...square,
-                  x: snappedX,
-                  y: snappedY,
-                  permanent: square.permanent || shouldPersist
-                }
-              : square
-          );
+        if (existingIndex !== -1) {
+          const existing = prev[existingIndex];
+          const nextPermanent = existing.permanent || shouldPersist;
+
+          if (
+            existing.x === snappedX &&
+            existing.y === snappedY &&
+            existing.permanent === nextPermanent
+          ) {
+            return prev;
+          }
+
+          const nextSquares = [...prev];
+          nextSquares[existingIndex] = {
+            ...existing,
+            x: snappedX,
+            y: snappedY,
+            permanent: nextPermanent
+          };
+          return nextSquares;
         }
 
         squareCounter.current += 1;
@@ -575,8 +695,7 @@ export default function CategoryGallery({
       const position = toStagePosition(event);
       if (!position) return;
       const newPosition = { x: position.x, y: position.y };
-      setMousePosition(newPosition);
-      mousePositionRef.current = newPosition;
+      queueCursorPosition(newPosition.x, newPosition.y);
 
       if (isMouseDownRef.current && position.inside) {
         const distance = Math.hypot(
@@ -595,8 +714,7 @@ export default function CategoryGallery({
       const position = toStagePosition(event);
       if (!position || !position.inside) return;
       isMouseDownRef.current = true;
-      setMousePosition({ x: position.x, y: position.y });
-      mousePositionRef.current = { x: position.x, y: position.y };
+      queueCursorPosition(position.x, position.y);
       revealSquareAtPosition(position.x, position.y);
       lastRevealPosition.current = { x: position.x, y: position.y };
 
@@ -633,8 +751,7 @@ export default function CategoryGallery({
 
       event.preventDefault();
       isMouseDownRef.current = true;
-      setMousePosition({ x: position.x, y: position.y });
-      mousePositionRef.current = { x: position.x, y: position.y };
+      queueCursorPosition(position.x, position.y);
       revealSquareAtPosition(position.x, position.y);
       lastRevealPosition.current = { x: position.x, y: position.y };
 
@@ -656,8 +773,7 @@ export default function CategoryGallery({
         event.preventDefault();
       }
       const newPosition = { x: position.x, y: position.y };
-      setMousePosition(newPosition);
-      mousePositionRef.current = newPosition;
+      queueCursorPosition(newPosition.x, newPosition.y);
 
       if (isMouseDownRef.current && position.inside) {
         const distance = Math.hypot(
@@ -703,7 +819,12 @@ export default function CategoryGallery({
         revealInterval.current = null;
       }
     };
-  }, []);
+  }, [
+    queueCursorPosition,
+    revealLockAnimationDurationMs,
+    revealLockDelayFactor,
+    revealLockDelayMaxMs
+  ]);
 
   const goNext = () => {
     setIsHd(false);
@@ -720,6 +841,8 @@ export default function CategoryGallery({
         : current
     );
   };
+
+  const isRevealFinal = isRevealComplete && !isRevealCelebrating;
 
   const shellClassName = `artist-subpage-shell category-shell${
     showSubpageLoader ? " is-subpage-loading" : ""
@@ -789,19 +912,41 @@ export default function CategoryGallery({
           className="category-brush-workbench category-workbench"
           aria-label={`${currentCategory} paintbrush reveal`}
         >
-          <div className="category-brush-stage category-brush-page" ref={stageRef}>
+          <div
+            className={`category-brush-stage category-brush-page${
+              isRevealCelebrating ? " is-reveal-celebrating" : ""
+            }${isRevealFinal ? " is-reveal-final" : ""}`}
+            ref={stageRef}
+          >
             <p className="category-brush-instruction">Click &amp; Drag to Reveal the Image.</p>
 
             {revealedSquares.map((square) => {
+              const squareCenterX = square.x + squareSize / 2;
+              const squareCenterY = square.y + squareSize / 2;
+              const distanceFromCompletion = Math.hypot(
+                squareCenterX - revealCompletionOrigin.x,
+                squareCenterY - revealCompletionOrigin.y
+              );
+              const lockDelayMs = Math.min(
+                revealLockDelayMaxMs,
+                Math.round(distanceFromCompletion * revealLockDelayFactor)
+              );
+
               return (
                 <div
                   key={square.id}
-                  className="category-brush-square"
+                  className={`category-brush-square${
+                    square.permanent ? " is-permanent" : ""
+                  }`}
                   style={{
                     left: square.x,
                     top: square.y,
                     width: squareSize,
-                    height: squareSize
+                    height: squareSize,
+                    animationDelay:
+                      isRevealCelebrating && square.permanent
+                        ? `${lockDelayMs}ms`
+                        : undefined
                   }}
                 >
                   <img
@@ -820,13 +965,25 @@ export default function CategoryGallery({
                 </div>
               );
             })}
+            <img
+              src={drawImage}
+              alt=""
+              aria-hidden="true"
+              className={`category-brush-final-image${
+                isRevealComplete ? " is-preloaded" : ""
+              }${isRevealFinal ? " is-visible" : ""}`}
+              draggable={false}
+              style={{
+                left: drawLayer.x,
+                top: drawLayer.y,
+                width: drawLayer.width,
+                height: drawLayer.height
+              }}
+            />
 
             <div
               className="category-brush-cursor"
-              style={{
-                left: mousePosition.x - 24,
-                top: mousePosition.y - 24
-              }}
+              ref={cursorRef}
               aria-hidden="true"
             >
               <svg fill="none" preserveAspectRatio="none" viewBox="0 0 48 48">

@@ -3,8 +3,10 @@ import { VinylPlayerMobile } from "./components/VinylPlayerMobile";
 import { AlbumStack } from "./components/AlbumStack";
 import { AudioSetupGuide } from "./components/AudioSetupGuide";
 import { FileStatusChecker } from "./components/FileStatusChecker";
-import { useState, useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { withBasePath } from "@/lib/basePath";
+
+type AudioPreloadStatus = "idle" | "loading" | "ready" | "error";
 
 export default function App() {
   const DESKTOP_ROW_WIDTH = 487.249 + 72 + 280;
@@ -25,6 +27,8 @@ export default function App() {
   const [showFileChecker, setShowFileChecker] = useState(false);
   const [isLoadingAudio, setIsLoadingAudio] = useState(false);
   const [loadingProgress, setLoadingProgress] = useState(0);
+  const [audioAssetLoadProgress, setAudioAssetLoadProgress] = useState(0);
+  const audioAssetLoadProgressRef = useRef(0);
   const audioContextRef = useRef<AudioContext | null>(null);
   const gainNodeRef = useRef<GainNode | null>(null);
   const audioElementRef = useRef<HTMLAudioElement | null>(null);
@@ -35,6 +39,10 @@ export default function App() {
   const audioPoolRef = useRef<Map<string, HTMLAudioElement>>(new Map());
   const activePlayPromisesRef = useRef<Set<Promise<void>>>(new Set());
   const playbackRequestIdRef = useRef(0);
+  const audioPreloadStatusRef = useRef<Map<string, AudioPreloadStatus>>(new Map());
+  const audioPreloadPromiseRef = useRef<Map<string, Promise<void>>>(new Map());
+  const preloadedAudioElementsRef = useRef<Map<string, HTMLAudioElement>>(new Map());
+  const preloadedAudioErrorUrlsRef = useRef<Set<string>>(new Set());
 
   const speedSettings = [
     { rpm: 33, rate: 1.0, duration: 3 },
@@ -95,12 +103,133 @@ export default function App() {
     return baseLibrary;
   };
 
-  const musicLibrary = getMusicLibrary();
+  const musicLibrary = useMemo(() => getMusicLibrary(), []);
+  const allAudioSources = useMemo(
+    () => Object.values(musicLibrary).map((track) => track.audioUrl),
+    [musicLibrary]
+  );
+  const totalAudioSourceCount = allAudioSources.length;
+
+  const getOrCreateAudioContainer = useCallback(() => {
+    let audioContainer = document.getElementById("audio-container");
+    if (!audioContainer) {
+      audioContainer = document.createElement("div");
+      audioContainer.id = "audio-container";
+      audioContainer.style.display = "none";
+      audioContainer.style.position = "absolute";
+      audioContainer.style.top = "-9999px";
+      document.body.appendChild(audioContainer);
+    }
+    return audioContainer;
+  }, []);
+
+  const updateAudioAssetProgress = useCallback(() => {
+    if (totalAudioSourceCount <= 0) {
+      setAudioAssetLoadProgress(100);
+      return;
+    }
+    let completeCount = 0;
+    audioPreloadStatusRef.current.forEach((status) => {
+      if (status === "ready" || status === "error") {
+        completeCount += 1;
+      }
+    });
+    setAudioAssetLoadProgress(
+      Math.round((completeCount / totalAudioSourceCount) * 100)
+    );
+  }, [totalAudioSourceCount]);
+
+  const preloadAudioSource = useCallback(
+    (audioUrl: string) => {
+      const status = audioPreloadStatusRef.current.get(audioUrl);
+      if (status === "ready") return Promise.resolve();
+      if (status === "error") return Promise.reject(new Error("Audio preload failed."));
+
+      const existingPromise = audioPreloadPromiseRef.current.get(audioUrl);
+      if (existingPromise) {
+        return existingPromise;
+      }
+
+      const preloadPromise = new Promise<void>((resolve, reject) => {
+        audioPreloadStatusRef.current.set(audioUrl, "loading");
+        updateAudioAssetProgress();
+
+        const audio = new Audio();
+        audio.crossOrigin = "anonymous";
+        audio.preload = "auto";
+        audio.src = audioUrl;
+        getOrCreateAudioContainer().appendChild(audio);
+        preloadedAudioElementsRef.current.set(audioUrl, audio);
+
+        let settled = false;
+
+        const cleanup = () => {
+          audio.removeEventListener("canplay", onReady);
+          audio.removeEventListener("loadeddata", onReady);
+          audio.removeEventListener("error", onError);
+          audioPreloadPromiseRef.current.delete(audioUrl);
+        };
+
+        const onReady = () => {
+          if (settled) return;
+          settled = true;
+          audioPreloadStatusRef.current.set(audioUrl, "ready");
+          preloadedAudioErrorUrlsRef.current.delete(audioUrl);
+          updateAudioAssetProgress();
+          cleanup();
+          resolve();
+        };
+
+        const onError = () => {
+          if (settled) return;
+          settled = true;
+          audioPreloadStatusRef.current.set(audioUrl, "error");
+          preloadedAudioErrorUrlsRef.current.add(audioUrl);
+          updateAudioAssetProgress();
+          cleanup();
+          reject(new Error("Audio preload failed."));
+        };
+
+        audio.addEventListener("canplay", onReady, { once: true });
+        audio.addEventListener("loadeddata", onReady, { once: true });
+        audio.addEventListener("error", onError, { once: true });
+        audio.load();
+      });
+
+      audioPreloadPromiseRef.current.set(audioUrl, preloadPromise);
+      return preloadPromise;
+    },
+    [getOrCreateAudioContainer, updateAudioAssetProgress]
+  );
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    allAudioSources.forEach((audioUrl) => {
+      audioPreloadStatusRef.current.set(audioUrl, "idle");
+    });
+    updateAudioAssetProgress();
+    allAudioSources.forEach((audioUrl) => {
+      void preloadAudioSource(audioUrl).catch(() => {
+        // Playback flow handles actual user-facing audio errors per track.
+      });
+    });
+  }, [allAudioSources, preloadAudioSource, updateAudioAssetProgress]);
+
+  useEffect(() => {
+    audioAssetLoadProgressRef.current = audioAssetLoadProgress;
+  }, [audioAssetLoadProgress]);
 
   const currentTrack =
     musicLibrary[currentAlbumId as keyof typeof musicLibrary];
   const playbackStatusLabel = isPlaying ? "Playing" : "Not Playing";
   const playbackStatusIcon = isPlaying ? "▶️" : "⏸️";
+  const combinedAudioLoadProgress = Math.max(
+    loadingProgress,
+    audioAssetLoadProgress
+  );
+  const showAudioLoadPercent =
+    !audioError &&
+    (isLoadingAudio || (isPlaying && combinedAudioLoadProgress < 100));
   const desktopStageRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -235,20 +364,10 @@ export default function App() {
       audio.preload = "metadata";
 
       // Attach to DOM for stability
-      let audioContainer = document.getElementById('audio-container');
-      if (!audioContainer) {
-        audioContainer = document.createElement('div');
-        audioContainer.id = 'audio-container';
-        audioContainer.style.display = 'none';
-        audioContainer.style.position = 'absolute';
-        audioContainer.style.top = '-9999px';
-        document.body.appendChild(audioContainer);
-      }
-      audioContainer.appendChild(audio);
+      getOrCreateAudioContainer().appendChild(audio);
 
       let resolved = false;
       let sourceIndex = 0;
-      let sourceTimeout: ReturnType<typeof setTimeout> | null = null;
 
       const tryNextSource = () => {
         if (resolved || sourceIndex >= sources.length) {
@@ -274,20 +393,12 @@ export default function App() {
             // Ignore seek errors before metadata is fully ready.
           }
           resolved = true;
-          if (sourceTimeout) {
-            clearTimeout(sourceTimeout);
-            sourceTimeout = null;
-          }
           cleanup();
           resolve(audio);
         };
 
         const onError = () => {
           if (resolved) return;
-          if (sourceTimeout) {
-            clearTimeout(sourceTimeout);
-            sourceTimeout = null;
-          }
           cleanup();
           setTimeout(tryNextSource, 100);
         };
@@ -301,7 +412,6 @@ export default function App() {
         audio.addEventListener('loadedmetadata', onSuccess, { once: true });
         audio.addEventListener('canplay', onSuccess, { once: true });
         audio.addEventListener('error', onError, { once: true });
-        sourceTimeout = setTimeout(onError, 8000);
         audio.load();
       };
 
@@ -455,7 +565,7 @@ export default function App() {
             }
 
             setIsLoadingAudio(true);
-            setLoadingProgress(10);
+            setLoadingProgress(Math.max(10, audioAssetLoadProgressRef.current));
 
             // Stop any current audio safely
             await stopAllAudioSafely();
@@ -464,7 +574,12 @@ export default function App() {
             try {
               const allSources = [currentTrack.audioUrl];
 
-              setLoadingProgress(30);
+              setLoadingProgress(Math.max(24, audioAssetLoadProgressRef.current));
+
+              await preloadAudioSource(currentTrack.audioUrl);
+              if (isStaleRequest()) return;
+
+              setLoadingProgress(Math.max(48, audioAssetLoadProgressRef.current));
 
               // Create completely isolated audio element
               const audio = await createIsolatedAudioElement(trackKey, allSources);
@@ -477,8 +592,8 @@ export default function App() {
                 }
                 return;
               }
-              
-              setLoadingProgress(60);
+
+              setLoadingProgress(Math.max(64, audioAssetLoadProgressRef.current));
 
               // Set up Web Audio API connection
               if (audioContextRef.current && gainNodeRef.current) {
@@ -493,7 +608,7 @@ export default function App() {
                 }
               }
 
-              setLoadingProgress(80);
+              setLoadingProgress(Math.max(82, audioAssetLoadProgressRef.current));
 
               // Store references
               audio.muted = false;
@@ -516,9 +631,14 @@ export default function App() {
               }
 
               if (!isStaleRequest()) {
+                const missingAudio = preloadedAudioErrorUrlsRef.current.has(
+                  currentTrack.audioUrl
+                );
                 setLoadingProgress(0);
                 setAudioErrorMessage(
-                  "Full MP3 not found. Add files to /public/songs/ (gravity, vivid-dreams, hereditary, being-so-normal, fallen)."
+                  missingAudio
+                    ? "A song file is missing. Add files to /public/songs/ (gravity, vivid-dreams, hereditary, being-so-normal, fallen)."
+                    : "Audio is still loading. Please try again."
                 );
                 setAudioError(true);
                 setIsPlaying(false);
@@ -682,6 +802,37 @@ export default function App() {
           padding: isMobile ? "16px" : "clamp(8px, 1.4vh, 16px)"
         }}
       >
+      {showAudioLoadPercent ? (
+        <div
+          className="absolute inset-x-0 z-50 flex justify-center px-3"
+          style={{
+            top: isMobile ? (isMobileLandscape ? "44px" : "48px") : "54px",
+            pointerEvents: "none"
+          }}
+          aria-live="polite"
+          aria-label={`Audio loading ${combinedAudioLoadProgress}%`}
+          role="status"
+        >
+          <div
+            style={{
+              minWidth: "56px",
+              borderRadius: "12px",
+              padding: "6px 10px",
+              background: "rgba(12, 16, 22, 0.62)",
+              border: "1px solid rgba(255,255,255,0.16)",
+              color: "rgba(255,255,255,0.92)",
+              textAlign: "center",
+              fontFamily: "var(--font-body), Helvetica Neue, Arial, sans-serif",
+              fontSize: "12px",
+              letterSpacing: "0.04em",
+              fontVariantNumeric: "tabular-nums"
+            }}
+          >
+            {combinedAudioLoadProgress}%
+          </div>
+        </div>
+      ) : null}
+
       {currentTrack && (
         <div
           className="absolute inset-x-0 z-50 flex justify-center px-3"

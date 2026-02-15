@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { motion, useMotionValue } from "motion/react";
+import { animate, motion, useMotionValue } from "motion/react";
 import svgPaths from "../imports/svg-gn53mo47my";
 import imgEllipse1 from "../assets/8a9ed19f53e6eb9d518e5f7ee658b6488187f89b.png";
 import { withBasePath } from "@/lib/basePath";
@@ -106,37 +106,50 @@ function VinylRecordMobile({
   setCurrentRotation: (rotation: number) => void;
 }) {
   const rotateValue = useMotionValue(currentRotation);
+  const rotationSnapshotRef = useRef(currentRotation);
 
   useEffect(() => {
-    rotateValue.set(currentRotation);
-  }, [currentRotation, rotateValue]);
+    const unsubscribe = rotateValue.on("change", (latest) => {
+      rotationSnapshotRef.current = latest;
+    });
+    return unsubscribe;
+  }, [rotateValue]);
 
-  const handleAnimationComplete = () => {
+  useEffect(() => {
     if (!isPlaying) {
-      const finalRotation = rotateValue.get() % 360;
+      const finalRotation =
+        ((rotationSnapshotRef.current % 360) + 360) % 360;
+      rotateValue.stop();
+      rotateValue.set(finalRotation);
       setCurrentRotation(finalRotation);
+      return;
     }
-  };
 
-  const handleAnimationUpdate = (latest: any) => {
-    if (typeof latest.rotate === 'number') {
-      rotateValue.set(latest.rotate);
+    const fromRotation = rotationSnapshotRef.current;
+    const controls = animate(rotateValue, fromRotation + 360, {
+      duration: rotationDuration,
+      ease: "linear",
+      repeat: Infinity,
+      repeatType: "loop"
+    });
+
+    return () => {
+      controls.stop();
+    };
+  }, [isPlaying, rotateValue, rotationDuration, setCurrentRotation]);
+
+  useEffect(() => {
+    if (!isPlaying) {
+      rotateValue.set(currentRotation);
+      rotationSnapshotRef.current = currentRotation;
     }
-  };
+  }, [currentRotation, isPlaying, rotateValue]);
 
   return (
     <motion.div
       className="absolute size-[294.65px] top-[48.86px]"
       data-name="CD"
       style={{ left: "calc(50% - 0.351px)", x: "-50%", rotate: rotateValue }}
-      animate={isPlaying ? { rotate: currentRotation + 360 } : { rotate: currentRotation }}
-      transition={{
-        duration: isPlaying ? rotationDuration : 0,
-        repeat: isPlaying ? Infinity : 0,
-        ease: "linear",
-      }}
-      onUpdate={handleAnimationUpdate}
-      onAnimationComplete={handleAnimationComplete}
     >
       {/* Main vinyl record image */}
       <div className="absolute left-0 size-[294.65px] top-0">

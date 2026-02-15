@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { motion, useMotionValue } from "motion/react";
+import { animate, motion, useMotionValue } from "motion/react";
 import svgPaths from "../imports/svg-witqoke8dj";
 import imgEllipse1 from "../assets/90b583e555306e1af2081d8031bcfb3e37b9514b.png";
 import { withBasePath } from "@/lib/basePath";
@@ -103,39 +103,50 @@ function VinylRecord({
   setCurrentRotation: (rotation: number) => void;
 }) {
   const rotateValue = useMotionValue(currentRotation);
-  const animationRef = useRef<any>(null);
+  const rotationSnapshotRef = useRef(currentRotation);
 
   useEffect(() => {
-    // Update motion value when currentRotation changes
-    rotateValue.set(currentRotation);
-  }, [currentRotation, rotateValue]);
+    const unsubscribe = rotateValue.on("change", (latest) => {
+      rotationSnapshotRef.current = latest;
+    });
+    return unsubscribe;
+  }, [rotateValue]);
 
-  const handleAnimationComplete = () => {
+  useEffect(() => {
     if (!isPlaying) {
-      // When stopped, capture the current rotation position
-      const finalRotation = rotateValue.get() % 360;
+      const finalRotation =
+        ((rotationSnapshotRef.current % 360) + 360) % 360;
+      rotateValue.stop();
+      rotateValue.set(finalRotation);
       setCurrentRotation(finalRotation);
+      return;
     }
-  };
+
+    const fromRotation = rotationSnapshotRef.current;
+    const controls = animate(rotateValue, fromRotation + 360, {
+      duration: rotationDuration,
+      ease: "linear",
+      repeat: Infinity,
+      repeatType: "loop"
+    });
+
+    return () => {
+      controls.stop();
+    };
+  }, [isPlaying, rotateValue, rotationDuration, setCurrentRotation]);
+
+  useEffect(() => {
+    if (!isPlaying) {
+      rotateValue.set(currentRotation);
+      rotationSnapshotRef.current = currentRotation;
+    }
+  }, [currentRotation, isPlaying, rotateValue]);
 
   return (
     <motion.div
       className="absolute size-[398.051px] top-[66px]"
       data-name="CD"
       style={{ left: "calc(50% - 0.475px)", x: "-50%", rotate: rotateValue }}
-      animate={isPlaying ? { rotate: currentRotation + 360 } : { rotate: currentRotation }}
-      transition={{
-        duration: isPlaying ? rotationDuration : 0,
-        repeat: isPlaying ? Infinity : 0,
-        ease: "linear",
-      }}
-      onUpdate={(latest) => {
-        // Continuously update the motion value during animation
-        if (typeof latest.rotate === 'number') {
-          rotateValue.set(latest.rotate);
-        }
-      }}
-      onAnimationComplete={handleAnimationComplete}
     >
       <div className="absolute left-0 size-[398.051px] top-0">
         <div className="absolute inset-[-7.39%_-4.2%_-3.52%_-6.71%]">
