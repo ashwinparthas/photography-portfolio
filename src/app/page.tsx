@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import CollectionsDropdown from "@/components/CollectionsDropdown";
 import SubpageFooter from "@/components/SubpageFooter";
 import { responsiveSrc, responsiveSrcSet } from "@/lib/responsiveImage";
@@ -79,6 +79,16 @@ export default function Home() {
   const [showJukeboxSection, setShowJukeboxSection] = useState(false);
   const loaderProgressRef = useRef(0);
   const loaderFillRef = useRef<HTMLDivElement | null>(null);
+  const vinylReadyRef = useRef(false);
+  const vinylReadyWaitersRef = useRef<Array<() => void>>([]);
+
+  const handleVinylReady = useCallback(() => {
+    if (vinylReadyRef.current) return;
+    vinylReadyRef.current = true;
+    const waiters = vinylReadyWaitersRef.current;
+    vinylReadyWaitersRef.current = [];
+    waiters.forEach((resolve) => resolve());
+  }, []);
 
   const preloadImage = (src: string) => {
     if (typeof window === "undefined") return;
@@ -101,7 +111,7 @@ export default function Home() {
         return false;
       }
     })();
-    const steadyFillDurationMs = isWarmSession ? 700 : 1500;
+    const steadyFillDurationMs = isWarmSession ? 1000 : 1900;
 
     const wait = (durationMs: number) =>
       new Promise<void>((resolve) => {
@@ -128,6 +138,24 @@ export default function Home() {
         }
       });
 
+    const waitForVinylReady = (timeoutMs: number) => {
+      if (vinylReadyRef.current) {
+        return Promise.resolve();
+      }
+      return new Promise<void>((resolve) => {
+        let timeoutId = 0;
+        const finalize = () => {
+          window.clearTimeout(timeoutId);
+          vinylReadyWaitersRef.current = vinylReadyWaitersRef.current.filter(
+            (waiter) => waiter !== finalize
+          );
+          resolve();
+        };
+        timeoutId = window.setTimeout(finalize, timeoutMs);
+        vinylReadyWaitersRef.current.push(finalize);
+      });
+    };
+
     const runLoader = async () => {
       const animateSteadyFill = (now: number) => {
         if (cancelled) return;
@@ -147,7 +175,7 @@ export default function Home() {
       if (firstFeatured) {
         await Promise.race([
           preloadCriticalImage(responsiveSrc(firstFeatured.src)),
-          wait(isWarmSession ? 180 : 850)
+          wait(isWarmSession ? 220 : 1000)
         ]);
       }
 
@@ -158,21 +186,30 @@ export default function Home() {
         // Ignore storage failures in private/session-restricted environments.
       }
 
+      setShowJukeboxSection(true);
+
       const elapsed = performance.now() - loaderStartTime;
-      const isFastPath = elapsed < (isWarmSession ? 160 : 420);
-      const minimumLoaderTimeMs = isFastPath ? 220 : 620;
-      if (elapsed < minimumLoaderTimeMs) {
-        await wait(minimumLoaderTimeMs - elapsed);
-      }
+      const minimumLoaderTimeMs = isWarmSession ? 1500 : 2600;
+      const remainingMinimumDurationMs = Math.max(0, minimumLoaderTimeMs - elapsed);
+      await Promise.all([
+        remainingMinimumDurationMs > 0
+          ? wait(remainingMinimumDurationMs)
+          : Promise.resolve(),
+        waitForVinylReady(isWarmSession ? 1600 : 3000)
+      ]);
+
       if (cancelled) return;
+      await wait(isWarmSession ? 120 : 220);
+      if (cancelled) return;
+
       if (progressFrame) {
         cancelAnimationFrame(progressFrame);
         progressFrame = 0;
       }
 
       const completionFrom = loaderProgressRef.current;
-      const completionDurationMs = isFastPath ? 170 : 360;
-      const exitDelayMs = isFastPath ? 80 : 180;
+      const completionDurationMs = isWarmSession ? 240 : 420;
+      const exitDelayMs = isWarmSession ? 110 : 180;
       const completionStart = performance.now();
       const completeProgress = (now: number) => {
         if (cancelled) return;
@@ -203,6 +240,9 @@ export default function Home() {
       if (progressFrame) cancelAnimationFrame(progressFrame);
       if (completionFrame) cancelAnimationFrame(completionFrame);
       if (exitTimer) clearTimeout(exitTimer);
+      const waiters = vinylReadyWaitersRef.current;
+      vinylReadyWaitersRef.current = [];
+      waiters.forEach((resolve) => resolve());
     };
   }, []);
 
@@ -513,7 +553,7 @@ export default function Home() {
           </section>
           <div ref={jukeboxMountRef} aria-hidden="true" />
           {showJukeboxSection ? (
-            <VinylPlayerSection />
+            <VinylPlayerSection onReady={handleVinylReady} />
           ) : (
             <div aria-hidden="true" style={JUKEBOX_PLACEHOLDER_STYLE} />
           )}

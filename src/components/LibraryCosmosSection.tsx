@@ -58,6 +58,8 @@ const HALFTONE_SPEED = 1.2;
 const ABSOLUTE_MIN_ZOOM = 0.22;
 const MAX_ZOOM = 2.4;
 const ZOOM_STEP = 0.2;
+const DRAG_POSITION_UPDATE_INTERVAL_MS = 50;
+const OVERVIEW_MODE_ZOOM_BUFFER = 0.06;
 
 const TEMPLATE_CANVAS_WIDTH = 2400;
 const TEMPLATE_CANVAS_HEIGHT = 1800;
@@ -184,8 +186,14 @@ export default function LibraryCosmosSection({
   const [hasFinePointer, setHasFinePointer] = useState(false);
   const [cursorVisible, setCursorVisible] = useState(false);
   const [cursorHoveringNode, setCursorHoveringNode] = useState(false);
-  const [cursorPosition, setCursorPosition] = useState({ x: 0, y: 0 });
+  const cursorX = useMotionValue(0);
+  const cursorY = useMotionValue(0);
+  const lastDragPositionUpdateRef = useRef(0);
   const [zoomLevel, setZoomLevel] = useState(1);
+  const [isDraggingCanvas, setIsDraggingCanvas] = useState(false);
+  const [isOverviewOptimized, setIsOverviewOptimized] = useState(false);
+  const [overviewLoadCount, setOverviewLoadCount] = useState(0);
+  const overviewPreloadStartedRef = useRef(false);
   const fitToViewportZoom = useMemo(() => {
     const fitByWidth = viewport.width / layout.canvasWidth;
     const fitByHeight = viewport.height / layout.canvasHeight;
@@ -195,8 +203,58 @@ export default function LibraryCosmosSection({
     () => clamp(Number((fitToViewportZoom * 0.98).toFixed(2)), ABSOLUTE_MIN_ZOOM, 1),
     [fitToViewportZoom]
   );
+  const isZoomedOutOverview = zoomLevel <= minZoomLevel + OVERVIEW_MODE_ZOOM_BUFFER;
+  const overviewSources = useMemo(
+    () => Array.from(new Set(albums.map((album) => responsiveSrc(album.src)))),
+    [albums]
+  );
+  const showOverviewLoader =
+    isZoomedOutOverview && !isOverviewOptimized && overviewSources.length > 0;
+  const useCompactNodes = isZoomedOutOverview;
+  const shouldRenderNodeImages = !showOverviewLoader;
+  const overviewLoadProgress =
+    overviewSources.length > 0
+      ? Math.min(100, Math.round((overviewLoadCount / overviewSources.length) * 100))
+      : 0;
+  const connectionVisibilityScale = clamp(1 / Math.max(zoomLevel, 0.0001), 1, 3.2);
+  const connectionStrokeWidth = Number((2.4 * connectionVisibilityScale).toFixed(2));
+  const connectionMarkerWidth = Number((10 * connectionVisibilityScale).toFixed(2));
+  const connectionMarkerHeight = Number((10 * connectionVisibilityScale).toFixed(2));
   const maxOffsetX = Math.max(0, layout.canvasWidth * zoomLevel - viewport.width);
   const maxOffsetY = Math.max(0, layout.canvasHeight * zoomLevel - viewport.height);
+
+  useEffect(() => {
+    if (!isZoomedOutOverview || isOverviewOptimized || overviewPreloadStartedRef.current) {
+      return;
+    }
+
+    if (overviewSources.length === 0) return;
+
+    overviewPreloadStartedRef.current = true;
+    let cancelled = false;
+    let loadedCount = 0;
+
+    const markLoaded = () => {
+      if (cancelled) return;
+      loadedCount += 1;
+      setOverviewLoadCount(loadedCount);
+      if (loadedCount >= overviewSources.length) {
+        setIsOverviewOptimized(true);
+      }
+    };
+
+    overviewSources.forEach((src) => {
+      const image = new window.Image();
+      image.decoding = "async";
+      image.onload = markLoaded;
+      image.onerror = markLoaded;
+      image.src = src;
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOverviewOptimized, isZoomedOutOverview, overviewSources]);
 
   useEffect(() => {
     setHalftoneEffect(
@@ -231,9 +289,18 @@ export default function LibraryCosmosSection({
     ) => {
       const visibleX = clamp(-offsetX, 0, limitX);
       const visibleY = clamp(-offsetY, 0, limitY);
-      setCanvasPosition({
+      const nextCanvasPosition = {
         x: visibleX / zoom + viewport.width / (2 * zoom),
         y: visibleY / zoom + viewport.height / (2 * zoom)
+      };
+      setCanvasPosition((current) => {
+        if (
+          Math.abs(current.x - nextCanvasPosition.x) < 0.1 &&
+          Math.abs(current.y - nextCanvasPosition.y) < 0.1
+        ) {
+          return current;
+        }
+        return nextCanvasPosition;
       });
     },
     [maxOffsetX, maxOffsetY, viewport.height, viewport.width, zoomLevel]
@@ -241,7 +308,24 @@ export default function LibraryCosmosSection({
 
   const handleDrag = useCallback(
     (_event: MouseEvent | TouchEvent | PointerEvent, _info: DragInfo) => {
+      const now = performance.now();
+      if (now - lastDragPositionUpdateRef.current < DRAG_POSITION_UPDATE_INTERVAL_MS) {
+        return;
+      }
+      lastDragPositionUpdateRef.current = now;
       updateViewportPosition(canvasX.get(), canvasY.get());
+    },
+    [canvasX, canvasY, updateViewportPosition]
+  );
+  const handleDragStart = useCallback(() => {
+    setIsDraggingCanvas(true);
+    setCursorHoveringNode(false);
+  }, []);
+  const handleDragEnd = useCallback(
+    (_event: MouseEvent | TouchEvent | PointerEvent, _info: DragInfo) => {
+      lastDragPositionUpdateRef.current = 0;
+      updateViewportPosition(canvasX.get(), canvasY.get());
+      setIsDraggingCanvas(false);
     },
     [canvasX, canvasY, updateViewportPosition]
   );
@@ -442,13 +526,13 @@ export default function LibraryCosmosSection({
               ref={viewportRef}
               onMouseMove={(event) => {
                 if (!hasFinePointer) return;
-                setCursorPosition({ x: event.clientX, y: event.clientY });
-                if (!cursorVisible) {
-                  setCursorVisible(true);
-                }
+                cursorX.set(event.clientX);
+                cursorY.set(event.clientY);
               }}
-              onMouseEnter={() => {
+              onMouseEnter={(event) => {
                 if (!hasFinePointer) return;
+                cursorX.set(event.clientX);
+                cursorY.set(event.clientY);
                 setCursorVisible(true);
               }}
               onMouseLeave={() => {
@@ -463,8 +547,9 @@ export default function LibraryCosmosSection({
                 dragElastic={0.1}
                 dragMomentum={false}
                 initial={{ x: 0, y: 0 }}
+                onDragStart={handleDragStart}
                 onDrag={handleDrag}
-                onDragEnd={handleDrag}
+                onDragEnd={handleDragEnd}
                 style={{
                   x: canvasX,
                   y: canvasY,
@@ -475,45 +560,52 @@ export default function LibraryCosmosSection({
                   minHeight: layout.canvasHeight
                 }}
               >
-                <svg
-                  className="library-connection-graph"
-                  width={layout.canvasWidth}
-                  height={layout.canvasHeight}
-                  viewBox={`0 0 ${layout.canvasWidth} ${layout.canvasHeight}`}
-                  aria-hidden="true"
-                >
-                  <defs>
-                    <marker
-                      id={markerId}
-                      markerWidth="8"
-                      markerHeight="8"
-                      refX="7"
-                      refY="4"
-                      orient="auto"
-                      markerUnits="strokeWidth"
-                    >
-                      <path d="M0,0 L8,4 L0,8 z" fill="rgba(255, 255, 255, 0.88)" />
-                    </marker>
-                  </defs>
-                  {connections.map((edge) => (
-                    <line
-                      key={edge.id}
-                      className="library-connection-edge"
-                      x1={edge.x1}
-                      y1={edge.y1}
-                      x2={edge.x2}
-                      y2={edge.y2}
-                      markerEnd={`url(#${markerId})`}
-                    />
-                  ))}
-                </svg>
+                {!showOverviewLoader ? (
+                  <svg
+                    className="library-connection-graph"
+                    width={layout.canvasWidth}
+                    height={layout.canvasHeight}
+                    viewBox={`0 0 ${layout.canvasWidth} ${layout.canvasHeight}`}
+                    aria-hidden="true"
+                  >
+                    <defs>
+                      <marker
+                        id={markerId}
+                        viewBox="0 0 8.5 8.5"
+                        markerWidth={connectionMarkerWidth}
+                        markerHeight={connectionMarkerHeight}
+                        refX="7.5"
+                        refY="4.25"
+                        orient="auto"
+                        markerUnits="userSpaceOnUse"
+                      >
+                        <path
+                          d="M0,0 L8.5,4.25 L0,8.5 z"
+                          fill="rgba(255, 255, 255, 0.98)"
+                        />
+                      </marker>
+                    </defs>
+                    {connections.map((edge) => (
+                      <line
+                        key={edge.id}
+                        className="library-connection-edge"
+                        style={{ strokeWidth: connectionStrokeWidth }}
+                        x1={edge.x1}
+                        y1={edge.y1}
+                        x2={edge.x2}
+                        y2={edge.y2}
+                        markerEnd={`url(#${markerId})`}
+                      />
+                    ))}
+                  </svg>
+                ) : null}
                 {layout.cards.map((card, order) => {
                   const album = albums[card.index];
                   return (
                     <motion.button
                       key={`${album.title}-${card.index}`}
                       type="button"
-                      className="library-node"
+                      className={`library-node${useCompactNodes ? " library-node-compact" : ""}`}
                       style={{
                         left: `${card.x}px`,
                         top: `${card.y}px`,
@@ -525,19 +617,28 @@ export default function LibraryCosmosSection({
                         duration: 0.5,
                         delay: Math.min(0.35, order * 0.012)
                       }}
-                      whileHover={{
-                        scale: 1.02,
-                        transition: {
-                          duration: 0.2,
-                          type: "spring",
-                          stiffness: 400
+                      whileHover={
+                        useCompactNodes
+                          ? undefined
+                          : {
+                              scale: 1.02,
+                              transition: {
+                                duration: 0.2,
+                                type: "spring",
+                                stiffness: 400
+                              }
+                            }
+                      }
+                      whileTap={useCompactNodes ? undefined : { scale: 0.98 }}
+                      onPointerDown={(event) => {
+                        if (!useCompactNodes) {
+                          event.stopPropagation();
                         }
                       }}
-                      whileTap={{ scale: 0.98 }}
-                      onPointerDown={(event) => event.stopPropagation()}
                       onMouseEnter={() => setCursorHoveringNode(true)}
                       onMouseLeave={() => setCursorHoveringNode(false)}
                       onClick={() => {
+                        if (showOverviewLoader || isDraggingCanvas) return;
                         setIsHd(false);
                         setLightbox({ index: card.index });
                       }}
@@ -549,25 +650,42 @@ export default function LibraryCosmosSection({
                           aspectRatio: `${card.width} / ${card.height}`
                         }}
                       >
-                        <img
-                          src={responsiveSrc(album.src)}
-                          srcSet={responsiveSrcSet(album.src)}
-                          sizes={`${Math.ceil(card.width)}px`}
-                          alt={album.title}
-                          loading={order < 10 ? "eager" : "lazy"}
-                          decoding="async"
-                        />
+                        {shouldRenderNodeImages ? (
+                          <img
+                            src={responsiveSrc(album.src)}
+                            srcSet={responsiveSrcSet(album.src)}
+                            sizes={`${Math.ceil(card.width)}px`}
+                            alt={album.title}
+                            loading={useCompactNodes ? "eager" : order < 10 ? "eager" : "lazy"}
+                            decoding="async"
+                          />
+                        ) : (
+                          <div className="library-node-image-placeholder" aria-hidden="true" />
+                        )}
                       </div>
-                      <span className="library-node-title">
-                        <span className="library-node-dot" aria-hidden="true" />
-                        {album.title}
-                      </span>
+                      {!useCompactNodes ? (
+                        <span className="library-node-title">
+                          <span className="library-node-dot" aria-hidden="true" />
+                          {album.title}
+                        </span>
+                      ) : null}
                     </motion.button>
                   );
                 })}
               </motion.div>
 
             </div>
+
+            {showOverviewLoader ? (
+              <div
+                className="library-overview-loader library-overlay-box"
+                role="status"
+                aria-live="polite"
+              >
+                <span className="library-overview-wheel" aria-hidden="true" />
+                <span>Optimizing drag speed... {overviewLoadProgress}%</span>
+              </div>
+            ) : null}
 
             <div className="library-instruction library-overlay-box" aria-hidden="true">
               <span>Click &amp; Drag</span>
@@ -614,8 +732,8 @@ export default function LibraryCosmosSection({
         <motion.div
           className="library-custom-cursor"
           style={{
-            left: cursorPosition.x,
-            top: cursorPosition.y
+            left: cursorX,
+            top: cursorY
           }}
           initial={{ scale: 0, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}

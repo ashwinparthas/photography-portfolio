@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import SubpageHeader from "@/components/SubpageHeader";
 import SubpageFooter from "@/components/SubpageFooter";
 import { withBasePath } from "@/lib/basePath";
@@ -37,7 +37,7 @@ type CategoryGalleryProps = {
 
 const SUBPAGE_FOOTER_LINKS = [{ label: "Reveal It", href: "#reveal" }];
 const SUBPAGE_LOADER_SESSION_PREFIX = "subpage-loader-warm-v1";
-const CRITICAL_SUBPAGE_PRELOAD_COUNT = 4;
+const CRITICAL_SUBPAGE_PRELOAD_COUNT = 8;
 
 const CURSOR_DOTS = Array.from({ length: 14 }, (_, index) => {
   const angle = (index / 14) * Math.PI * 2;
@@ -85,6 +85,14 @@ export default function CategoryGallery({
   );
   const revealPassesByKeyRef = useRef<Map<string, number>>(new Map());
   const lastTouchTimestampRef = useRef(0);
+  const criticalTileRefsRef = useRef<Map<number, HTMLImageElement>>(new Map());
+  const criticalRenderReadyRef = useRef(false);
+  const criticalRenderWaitersRef = useRef<Array<() => void>>([]);
+  const loadedCriticalIndexesRef = useRef<Set<number>>(new Set());
+  const criticalSubpageImageCount = Math.min(
+    CRITICAL_SUBPAGE_PRELOAD_COUNT,
+    images.length
+  );
 
   const squareSize = 108;
   const revealDistance = 25;
@@ -93,6 +101,68 @@ export default function CategoryGallery({
     () => images[0]?.src ?? "/photos/Bridge.png"
   );
   const drawImage = useMemo(() => withBasePath(selectedPhotoSrc), [selectedPhotoSrc]);
+
+  const resolveCriticalRenderReady = useCallback(() => {
+    if (criticalRenderReadyRef.current) return;
+    criticalRenderReadyRef.current = true;
+    const waiters = criticalRenderWaitersRef.current;
+    criticalRenderWaitersRef.current = [];
+    waiters.forEach((resolve) => resolve());
+  }, []);
+
+  const markCriticalImageReady = useCallback(
+    (index: number) => {
+      if (index >= criticalSubpageImageCount) return;
+      if (loadedCriticalIndexesRef.current.has(index)) return;
+      loadedCriticalIndexesRef.current.add(index);
+      if (loadedCriticalIndexesRef.current.size >= criticalSubpageImageCount) {
+        resolveCriticalRenderReady();
+      }
+    },
+    [criticalSubpageImageCount, resolveCriticalRenderReady]
+  );
+
+  const registerCriticalTileRef = useCallback(
+    (index: number, node: HTMLImageElement | null) => {
+      if (index >= criticalSubpageImageCount) {
+        criticalTileRefsRef.current.delete(index);
+        return;
+      }
+
+      if (!node) {
+        criticalTileRefsRef.current.delete(index);
+        return;
+      }
+
+      criticalTileRefsRef.current.set(index, node);
+      if (node.complete && node.naturalWidth > 0) {
+        markCriticalImageReady(index);
+      }
+    },
+    [criticalSubpageImageCount, markCriticalImageReady]
+  );
+
+  useEffect(() => {
+    criticalRenderReadyRef.current = false;
+    loadedCriticalIndexesRef.current = new Set();
+
+    if (criticalSubpageImageCount === 0) {
+      resolveCriticalRenderReady();
+      return;
+    }
+
+    criticalTileRefsRef.current.forEach((node, index) => {
+      if (index < criticalSubpageImageCount && node.complete && node.naturalWidth > 0) {
+        markCriticalImageReady(index);
+      }
+    });
+  }, [
+    currentCategory,
+    images,
+    criticalSubpageImageCount,
+    markCriticalImageReady,
+    resolveCriticalRenderReady
+  ]);
 
   const preloadResponsiveImage = (src: string) =>
     new Promise<void>((resolve) => {
@@ -133,17 +203,32 @@ export default function CategoryGallery({
         setTimeout(resolve, durationMs);
       });
 
+    const waitForCriticalTileRender = (timeoutMs: number) => {
+      if (criticalRenderReadyRef.current || criticalSubpageImageCount === 0) {
+        return Promise.resolve();
+      }
+      return new Promise<void>((resolve) => {
+        let timeoutId = 0;
+        const finalize = () => {
+          window.clearTimeout(timeoutId);
+          criticalRenderWaitersRef.current = criticalRenderWaitersRef.current.filter(
+            (waiter) => waiter !== finalize
+          );
+          resolve();
+        };
+        timeoutId = window.setTimeout(finalize, timeoutMs);
+        criticalRenderWaitersRef.current.push(finalize);
+      });
+    };
+
     const runLoader = async () => {
       const criticalImages = images.slice(
         0,
         Math.min(CRITICAL_SUBPAGE_PRELOAD_COUNT, images.length)
       );
-      await Promise.race([
-        Promise.all(
-          criticalImages.map((image) => preloadResponsiveImage(image.src))
-        ),
-        wait(isWarmSession ? 160 : 760)
-      ]);
+      await Promise.all(
+        criticalImages.map((image) => preloadResponsiveImage(image.src))
+      );
 
       if (cancelled) return;
       try {
@@ -153,15 +238,21 @@ export default function CategoryGallery({
       }
 
       const elapsed = performance.now() - loaderStartTime;
-      const isFastPath = elapsed < (isWarmSession ? 140 : 320);
-      const minimumLoaderTimeMs = isFastPath ? 180 : 460;
-      const exitAnimationMs = isFastPath ? 170 : 320;
-      if (elapsed < minimumLoaderTimeMs) {
-        await wait(minimumLoaderTimeMs - elapsed);
-      }
+      const minimumLoaderTimeMs = isWarmSession ? 1500 : 2300;
+      const remainingMinimumLoaderMs = Math.max(0, minimumLoaderTimeMs - elapsed);
+      await Promise.all([
+        remainingMinimumLoaderMs > 0
+          ? wait(remainingMinimumLoaderMs)
+          : Promise.resolve(),
+        waitForCriticalTileRender(isWarmSession ? 1200 : 2400)
+      ]);
+
+      if (cancelled) return;
+      await wait(isWarmSession ? 90 : 160);
       if (cancelled) return;
 
       setIsSubpageLoaderExiting(true);
+      const exitAnimationMs = isWarmSession ? 760 : 860;
 
       exitTimer = setTimeout(() => {
         if (cancelled) return;
@@ -173,11 +264,14 @@ export default function CategoryGallery({
 
     return () => {
       cancelled = true;
+      const waiters = criticalRenderWaitersRef.current;
+      criticalRenderWaitersRef.current = [];
+      waiters.forEach((resolve) => resolve());
       if (exitTimer) {
         clearTimeout(exitTimer);
       }
     };
-  }, [currentCategory, images]);
+  }, [criticalSubpageImageCount, currentCategory, images]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -627,8 +721,12 @@ export default function CategoryGallery({
     );
   };
 
+  const shellClassName = `artist-subpage-shell category-shell${
+    showSubpageLoader ? " is-subpage-loading" : ""
+  }${isSubpageLoaderExiting ? " is-subpage-revealing" : ""}`;
+
   return (
-    <div className="artist-subpage-shell category-shell">
+    <div className={shellClassName}>
       <main className="artist-subpage-main">
         <SubpageHeader pageLabel={currentCategory} />
 
@@ -644,8 +742,23 @@ export default function CategoryGallery({
                   srcSet={responsiveSrcSet(image.src)}
                   sizes="(max-width: 600px) 100vw, (max-width: 900px) 50vw, 25vw"
                   alt={image.alt}
-                  loading={index < 1 ? "eager" : "lazy"}
+                  loading={index < criticalSubpageImageCount ? "eager" : "lazy"}
                   decoding="async"
+                  ref={
+                    index < criticalSubpageImageCount
+                      ? (node) => registerCriticalTileRef(index, node)
+                      : undefined
+                  }
+                  onLoad={
+                    index < criticalSubpageImageCount
+                      ? () => markCriticalImageReady(index)
+                      : undefined
+                  }
+                  onError={
+                    index < criticalSubpageImageCount
+                      ? () => markCriticalImageReady(index)
+                      : undefined
+                  }
                 />
                 <button
                   type="button"

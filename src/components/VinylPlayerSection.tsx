@@ -5,9 +5,14 @@ import { createPortal } from "react-dom";
 import VinylPlayerApp from "@/components/vinyl/VinylPlayerApp";
 import { withBasePath } from "@/lib/basePath";
 
-export default function VinylPlayerSection() {
+type VinylPlayerSectionProps = {
+  onReady?: () => void;
+};
+
+export default function VinylPlayerSection({ onReady }: VinylPlayerSectionProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const [mountNode, setMountNode] = useState<HTMLDivElement | null>(null);
+  const readySentRef = useRef(false);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -31,12 +36,43 @@ export default function VinylPlayerSection() {
       portalMount.style.height = "100%";
       shadow.appendChild(portalMount);
     }
+
+    let frameOne = 0;
+    let frameTwo = 0;
+    const notifyReady = () => {
+      if (readySentRef.current) return;
+      readySentRef.current = true;
+      onReady?.();
+    };
+    const scheduleReadyNotification = () => {
+      frameOne = window.requestAnimationFrame(() => {
+        frameTwo = window.requestAnimationFrame(() => {
+          notifyReady();
+        });
+      });
+    };
+
+    if (cssLink.sheet) {
+      scheduleReadyNotification();
+    } else {
+      cssLink.addEventListener("load", scheduleReadyNotification, { once: true });
+      cssLink.addEventListener("error", scheduleReadyNotification, { once: true });
+    }
+
     setMountNode(portalMount);
 
     return () => {
+      if (frameOne) {
+        window.cancelAnimationFrame(frameOne);
+      }
+      if (frameTwo) {
+        window.cancelAnimationFrame(frameTwo);
+      }
+      cssLink.removeEventListener("load", scheduleReadyNotification);
+      cssLink.removeEventListener("error", scheduleReadyNotification);
       setMountNode(null);
     };
-  }, []);
+  }, [onReady]);
 
   return (
     <section className="vinyl-entry" aria-label="Vinyl Player">
