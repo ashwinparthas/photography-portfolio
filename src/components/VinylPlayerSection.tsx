@@ -12,11 +12,13 @@ type VinylPlayerSectionProps = {
 export default function VinylPlayerSection({ onReady }: VinylPlayerSectionProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const [mountNode, setMountNode] = useState<HTMLDivElement | null>(null);
+  const [isStylesReady, setIsStylesReady] = useState(false);
   const readySentRef = useRef(false);
 
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
+    readySentRef.current = false;
 
     const shadow = host.shadowRoot ?? host.attachShadow({ mode: "open" });
     let cssLink = shadow.querySelector<HTMLLinkElement>('link[data-vinyl-css="true"]');
@@ -42,6 +44,7 @@ export default function VinylPlayerSection({ onReady }: VinylPlayerSectionProps)
     const notifyReady = () => {
       if (readySentRef.current) return;
       readySentRef.current = true;
+      setIsStylesReady(true);
       onReady?.();
     };
     const scheduleReadyNotification = () => {
@@ -75,9 +78,12 @@ export default function VinylPlayerSection({ onReady }: VinylPlayerSectionProps)
   }, [onReady]);
 
   return (
-    <section className="vinyl-entry" aria-label="Vinyl Player">
+    <section
+      className={`vinyl-entry${isStylesReady ? "" : " is-loading"}`}
+      aria-label="Vinyl Player"
+    >
       <div ref={hostRef} className="vinyl-entry-frame" />
-      {mountNode ? createPortal(<VinylPlayerApp />, mountNode) : null}
+      {mountNode && isStylesReady ? createPortal(<VinylPlayerApp />, mountNode) : null}
     </section>
   );
 }

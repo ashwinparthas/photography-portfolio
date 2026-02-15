@@ -734,6 +734,14 @@ img {
   background: transparent;
 }
 
+.vinyl-entry.is-loading {
+  background: linear-gradient(180deg, #07090f 0%, #0e111a 100%);
+}
+
+.vinyl-entry.is-loading .vinyl-entry-frame {
+  background: #060606;
+}
+
 .category-shell {
   min-height: 100vh;
   background: #ffffff;
@@ -2323,6 +2331,29 @@ img {
   .artist-subpage-reveal-link {
     white-space: normal;
     overflow-wrap: anywhere;
+  }
+}
+
+@media (max-width: 900px) and (orientation: portrait) and (hover: none) and (pointer: coarse) {
+  .artist-header .artist-wordmark {
+    margin: 0;
+    transform: translateY(-0.16em);
+  }
+
+  .library-overview-loader {
+    top: 58px;
+    left: 12px;
+    right: auto;
+    gap: 0;
+  }
+
+  .library-overview-wheel {
+    display: none;
+  }
+
+  .library-overview-progress {
+    min-width: 0;
+    text-align: left;
   }
 }
 
