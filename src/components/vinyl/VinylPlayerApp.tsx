@@ -804,9 +804,11 @@ export default function App() {
       >
       {showAudioLoadPercent ? (
         <div
-          className="absolute inset-x-0 z-50 flex justify-center px-3"
+          className={`absolute z-50 flex px-3 ${
+            isMobile ? "right-0 justify-end" : "inset-x-0 justify-center"
+          }`}
           style={{
-            top: isMobile ? (isMobileLandscape ? "44px" : "48px") : "54px",
+            top: isMobile ? (isMobileLandscape ? "56px" : "78px") : "54px",
             pointerEvents: "none"
           }}
           aria-live="polite"

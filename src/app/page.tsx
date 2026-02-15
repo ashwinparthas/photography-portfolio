@@ -25,6 +25,16 @@ const HOME_FOOTER_LINKS = [
 ];
 
 const HOME_LOADER_SESSION_KEY = "home-loader-warm-v2";
+const MOBILE_HERO_LOADER_RATIO = 0.8;
+const MOBILE_HERO_LOADER_MIN_COUNT = 3;
+const getMobileHeroCriticalCount = () =>
+  Math.min(
+    FEATURED_PHOTOS.length,
+    Math.max(
+      MOBILE_HERO_LOADER_MIN_COUNT,
+      Math.ceil(FEATURED_PHOTOS.length * MOBILE_HERO_LOADER_RATIO)
+    )
+  );
 
 const LIBRARY_PLACEHOLDER_STYLE = {
   minHeight: "clamp(500px, 92svh, 1000px)"
@@ -81,6 +91,42 @@ export default function Home() {
   const loaderFillRef = useRef<HTMLDivElement | null>(null);
   const vinylReadyRef = useRef(false);
   const vinylReadyWaitersRef = useRef<Array<() => void>>([]);
+  const heroImageRefsRef = useRef<Map<number, HTMLImageElement>>(new Map());
+  const heroLoadedIndexesRef = useRef<Set<number>>(new Set());
+  const heroCriticalCountRef = useRef(1);
+  const isTouchMobileDevice =
+    typeof window !== "undefined" &&
+    window.matchMedia("(max-width: 900px) and (hover: none) and (pointer: coarse)")
+      .matches;
+  const heroLoaderImageCount =
+    FEATURED_PHOTOS.length > 0
+      ? isTouchMobileDevice
+        ? getMobileHeroCriticalCount()
+        : 1
+      : 0;
+
+  const markHeroImageReady = useCallback((index: number) => {
+    if (index >= heroCriticalCountRef.current) return;
+    heroLoadedIndexesRef.current.add(index);
+  }, []);
+
+  const registerHeroImageRef = useCallback(
+    (index: number, node: HTMLImageElement | null) => {
+      if (!node) {
+        heroImageRefsRef.current.delete(index);
+        return;
+      }
+      heroImageRefsRef.current.set(index, node);
+      if (
+        index < heroCriticalCountRef.current &&
+        node.complete &&
+        node.naturalWidth > 0
+      ) {
+        markHeroImageReady(index);
+      }
+    },
+    [markHeroImageReady]
+  );
 
   const handleVinylReady = useCallback(() => {
     if (vinylReadyRef.current) return;
@@ -111,6 +157,27 @@ export default function Home() {
         return false;
       }
     })();
+    const isMobileLoader = window.matchMedia(
+      "(max-width: 900px) and (hover: none) and (pointer: coarse)"
+    ).matches;
+    const mobileHeroCriticalCount = getMobileHeroCriticalCount();
+    const criticalHeroImageCount =
+      FEATURED_PHOTOS.length > 0
+        ? isMobileLoader
+          ? mobileHeroCriticalCount
+          : 1
+        : 0;
+    heroCriticalCountRef.current = criticalHeroImageCount;
+    heroLoadedIndexesRef.current = new Set();
+    heroImageRefsRef.current.forEach((node, index) => {
+      if (
+        index < heroCriticalCountRef.current &&
+        node.complete &&
+        node.naturalWidth > 0
+      ) {
+        heroLoadedIndexesRef.current.add(index);
+      }
+    });
     const steadyFillDurationMs = isWarmSession ? 1000 : 1900;
 
     const wait = (durationMs: number) =>
@@ -156,13 +223,63 @@ export default function Home() {
       });
     };
 
+    const getHeroArtifactProgress = () => {
+      const criticalCount = heroCriticalCountRef.current;
+      if (criticalCount <= 0) return 1;
+      return Math.min(1, heroLoadedIndexesRef.current.size / criticalCount);
+    };
+
+    const waitForHeroArtifacts = (timeoutMs: number) => {
+      if (getHeroArtifactProgress() >= 1) {
+        return Promise.resolve();
+      }
+
+      return new Promise<void>((resolve) => {
+        let frame = 0;
+        let timeoutId = 0;
+
+        const finalize = () => {
+          if (frame) {
+            window.cancelAnimationFrame(frame);
+          }
+          if (timeoutId) {
+            window.clearTimeout(timeoutId);
+          }
+          resolve();
+        };
+
+        const check = () => {
+          if (cancelled || getHeroArtifactProgress() >= 1) {
+            finalize();
+            return;
+          }
+          frame = window.requestAnimationFrame(check);
+        };
+
+        timeoutId = window.setTimeout(finalize, timeoutMs);
+        frame = window.requestAnimationFrame(check);
+      });
+    };
+
     const runLoader = async () => {
       const animateSteadyFill = (now: number) => {
         if (cancelled) return;
         const elapsed = now - loaderStartTime;
-        const progressRatio = Math.min(1, elapsed / steadyFillDurationMs);
-        const eased = 1 - Math.pow(1 - progressRatio, 2.4);
-        const target = 6 + eased * 86;
+
+        let target = 0;
+        if (isMobileLoader) {
+          const heroProgress = getHeroArtifactProgress();
+          const vinylProgress = vinylReadyRef.current ? 1 : 0;
+          const warmupProgress = Math.min(1, elapsed / (isWarmSession ? 900 : 1800));
+          const artifactProgress =
+            heroProgress * 0.72 + vinylProgress * 0.23 + warmupProgress * 0.05;
+          target = 4 + artifactProgress * 90;
+        } else {
+          const progressRatio = Math.min(1, elapsed / steadyFillDurationMs);
+          const eased = 1 - Math.pow(1 - progressRatio, 2.4);
+          target = 6 + eased * 86;
+        }
+
         if (target > loaderProgressRef.current) {
           setProgress(target);
         }
@@ -170,11 +287,21 @@ export default function Home() {
       };
 
       progressFrame = requestAnimationFrame(animateSteadyFill);
+      setShowJukeboxSection(true);
 
-      const firstFeatured = FEATURED_PHOTOS[0];
-      if (firstFeatured) {
+      const criticalHeroSources = FEATURED_PHOTOS.slice(
+        0,
+        heroCriticalCountRef.current
+      ).map((photo) => responsiveSrc(photo.src));
+      const criticalHeroLoadPromises = criticalHeroSources.map((src, index) =>
+        preloadCriticalImage(src).then(() => {
+          markHeroImageReady(index);
+        })
+      );
+
+      if (criticalHeroLoadPromises.length > 0) {
         await Promise.race([
-          preloadCriticalImage(responsiveSrc(firstFeatured.src)),
+          criticalHeroLoadPromises[0],
           wait(isWarmSession ? 220 : 1000)
         ]);
       }
@@ -186,16 +313,28 @@ export default function Home() {
         // Ignore storage failures in private/session-restricted environments.
       }
 
-      setShowJukeboxSection(true);
-
       const elapsed = performance.now() - loaderStartTime;
-      const minimumLoaderTimeMs = isWarmSession ? 1500 : 2600;
+      const minimumLoaderTimeMs = isMobileLoader
+        ? isWarmSession
+          ? 1100
+          : 1800
+        : isWarmSession
+          ? 1500
+          : 2600;
+      const artifactTimeoutMs = isMobileLoader
+        ? isWarmSession
+          ? 4000
+          : 6500
+        : isWarmSession
+          ? 1600
+          : 3000;
       const remainingMinimumDurationMs = Math.max(0, minimumLoaderTimeMs - elapsed);
       await Promise.all([
         remainingMinimumDurationMs > 0
           ? wait(remainingMinimumDurationMs)
           : Promise.resolve(),
-        waitForVinylReady(isWarmSession ? 1600 : 3000)
+        waitForHeroArtifacts(artifactTimeoutMs),
+        waitForVinylReady(artifactTimeoutMs)
       ]);
 
       if (cancelled) return;
@@ -244,7 +383,7 @@ export default function Home() {
       vinylReadyWaitersRef.current = [];
       waiters.forEach((resolve) => resolve());
     };
-  }, []);
+  }, [markHeroImageReady]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -519,8 +658,11 @@ export default function Home() {
                     srcSet={responsiveSrcSet(photo.src)}
                     sizes="(max-width: 760px) 78vw, 58vw"
                     alt={photo.title}
-                    loading={index < 1 ? "eager" : "lazy"}
+                    loading={index < heroLoaderImageCount ? "eager" : "lazy"}
                     decoding="async"
+                    ref={(node) => registerHeroImageRef(index, node)}
+                    onLoad={() => markHeroImageReady(index)}
+                    onError={() => markHeroImageReady(index)}
                   />
                   <button
                     type="button"

@@ -37,7 +37,9 @@ type CategoryGalleryProps = {
 
 const SUBPAGE_FOOTER_LINKS = [{ label: "Reveal It", href: "#reveal" }];
 const SUBPAGE_LOADER_SESSION_PREFIX = "subpage-loader-warm-v1";
-const CRITICAL_SUBPAGE_PRELOAD_COUNT = 8;
+const SUBPAGE_LOADER_IMAGE_RATIO = 0.8;
+const SUBPAGE_LOADER_IMAGE_MIN_COUNT = 3;
+const SUBPAGE_LOADER_IMAGE_MAX_COUNT = 12;
 
 const CURSOR_DOTS = Array.from({ length: 14 }, (_, index) => {
   const angle = (index / 14) * Math.PI * 2;
@@ -76,6 +78,8 @@ export default function CategoryGallery({
     width: 0,
     height: 0
   });
+  const [isPaintbrushImageReady, setIsPaintbrushImageReady] = useState(false);
+  const [paintbrushImageLoadProgress, setPaintbrushImageLoadProgress] = useState(0);
 
   const stageRef = useRef<HTMLDivElement | null>(null);
   const cursorRef = useRef<HTMLDivElement | null>(null);
@@ -96,14 +100,22 @@ export default function CategoryGallery({
   const revealCompletionTriggeredRef = useRef(false);
   const revealCelebrateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastTouchTimestampRef = useRef(0);
+  const paintbrushImageReadyRef = useRef(false);
   const criticalTileRefsRef = useRef<Map<number, HTMLImageElement>>(new Map());
   const criticalRenderReadyRef = useRef(false);
   const criticalRenderWaitersRef = useRef<Array<() => void>>([]);
   const loadedCriticalIndexesRef = useRef<Set<number>>(new Set());
-  const criticalSubpageImageCount = Math.min(
-    CRITICAL_SUBPAGE_PRELOAD_COUNT,
-    images.length
-  );
+  const trackedSubpageImageCount =
+    images.length > 0
+      ? Math.min(
+          images.length,
+          SUBPAGE_LOADER_IMAGE_MAX_COUNT,
+          Math.max(
+            SUBPAGE_LOADER_IMAGE_MIN_COUNT,
+            Math.ceil(images.length * SUBPAGE_LOADER_IMAGE_RATIO)
+          )
+        )
+      : 0;
 
   const squareSize = 108;
   const revealDistance = 25;
@@ -141,19 +153,19 @@ export default function CategoryGallery({
 
   const markCriticalImageReady = useCallback(
     (index: number) => {
-      if (index >= criticalSubpageImageCount) return;
+      if (index >= trackedSubpageImageCount) return;
       if (loadedCriticalIndexesRef.current.has(index)) return;
       loadedCriticalIndexesRef.current.add(index);
-      if (loadedCriticalIndexesRef.current.size >= criticalSubpageImageCount) {
+      if (loadedCriticalIndexesRef.current.size >= trackedSubpageImageCount) {
         resolveCriticalRenderReady();
       }
     },
-    [criticalSubpageImageCount, resolveCriticalRenderReady]
+    [resolveCriticalRenderReady, trackedSubpageImageCount]
   );
 
   const registerCriticalTileRef = useCallback(
     (index: number, node: HTMLImageElement | null) => {
-      if (index >= criticalSubpageImageCount) {
+      if (index >= trackedSubpageImageCount) {
         criticalTileRefsRef.current.delete(index);
         return;
       }
@@ -168,29 +180,29 @@ export default function CategoryGallery({
         markCriticalImageReady(index);
       }
     },
-    [criticalSubpageImageCount, markCriticalImageReady]
+    [markCriticalImageReady, trackedSubpageImageCount]
   );
 
   useEffect(() => {
     criticalRenderReadyRef.current = false;
     loadedCriticalIndexesRef.current = new Set();
 
-    if (criticalSubpageImageCount === 0) {
+    if (trackedSubpageImageCount === 0) {
       resolveCriticalRenderReady();
       return;
     }
 
     criticalTileRefsRef.current.forEach((node, index) => {
-      if (index < criticalSubpageImageCount && node.complete && node.naturalWidth > 0) {
+      if (index < trackedSubpageImageCount && node.complete && node.naturalWidth > 0) {
         markCriticalImageReady(index);
       }
     });
   }, [
     currentCategory,
     images,
-    criticalSubpageImageCount,
     markCriticalImageReady,
-    resolveCriticalRenderReady
+    resolveCriticalRenderReady,
+    trackedSubpageImageCount
   ]);
 
   const preloadResponsiveImage = (src: string) =>
@@ -232,8 +244,8 @@ export default function CategoryGallery({
         setTimeout(resolve, durationMs);
       });
 
-    const waitForCriticalTileRender = (timeoutMs: number) => {
-      if (criticalRenderReadyRef.current || criticalSubpageImageCount === 0) {
+    const waitForTrackedTileRender = (timeoutMs: number) => {
+      if (criticalRenderReadyRef.current || trackedSubpageImageCount === 0) {
         return Promise.resolve();
       }
       return new Promise<void>((resolve) => {
@@ -253,7 +265,7 @@ export default function CategoryGallery({
     const runLoader = async () => {
       const criticalImages = images.slice(
         0,
-        Math.min(CRITICAL_SUBPAGE_PRELOAD_COUNT, images.length)
+        trackedSubpageImageCount
       );
       await Promise.all(
         criticalImages.map((image) => preloadResponsiveImage(image.src))
@@ -267,13 +279,14 @@ export default function CategoryGallery({
       }
 
       const elapsed = performance.now() - loaderStartTime;
-      const minimumLoaderTimeMs = isWarmSession ? 550 : 900;
+      const minimumLoaderTimeMs = isWarmSession ? 700 : 1200;
+      const artifactTimeoutMs = isWarmSession ? 3200 : 5600;
       const remainingMinimumLoaderMs = Math.max(0, minimumLoaderTimeMs - elapsed);
       await Promise.all([
         remainingMinimumLoaderMs > 0
           ? wait(remainingMinimumLoaderMs)
           : Promise.resolve(),
-        waitForCriticalTileRender(isWarmSession ? 450 : 900)
+        waitForTrackedTileRender(artifactTimeoutMs)
       ]);
 
       if (cancelled) return;
@@ -300,19 +313,19 @@ export default function CategoryGallery({
         clearTimeout(exitTimer);
       }
     };
-  }, [criticalSubpageImageCount, currentCategory, images]);
+  }, [currentCategory, images, trackedSubpageImageCount]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
     const timer = window.setTimeout(() => {
       images
-        .slice(CRITICAL_SUBPAGE_PRELOAD_COUNT)
+        .slice(trackedSubpageImageCount)
         .forEach((image) => warmImage(image.src));
     }, 420);
     return () => {
       window.clearTimeout(timer);
     };
-  }, [currentCategory, images]);
+  }, [currentCategory, images, trackedSubpageImageCount]);
 
   useEffect(() => {
     if (!showSubpageLoader) return;
@@ -438,7 +451,12 @@ export default function CategoryGallery({
   }, []);
 
   useEffect(() => {
+    paintbrushImageReadyRef.current = isPaintbrushImageReady;
+  }, [isPaintbrushImageReady]);
+
+  useEffect(() => {
     let cancelled = false;
+    let progressTimer: ReturnType<typeof setInterval> | null = null;
 
     const setDimensions = (width: number, height: number) => {
       if (cancelled) return;
@@ -448,34 +466,58 @@ export default function CategoryGallery({
       });
     };
 
-    const loadDimensions = async () => {
-      try {
-        if (typeof createImageBitmap === "function") {
-          const response = await fetch(drawImage);
-          if (!response.ok) {
-            throw new Error("Failed to load image dimensions.");
-          }
-          const blob = await response.blob();
-          const bitmap = await createImageBitmap(blob);
-          setDimensions(bitmap.width, bitmap.height);
-          bitmap.close();
-          return;
-        }
-      } catch {
-        // Fallback below handles environments without createImageBitmap.
+    const finishLoad = () => {
+      if (cancelled) return;
+      if (progressTimer) {
+        clearInterval(progressTimer);
+        progressTimer = null;
       }
-
-      const img = new Image();
-      img.onload = () => {
-        setDimensions(img.naturalWidth, img.naturalHeight);
-      };
-      img.src = drawImage;
+      paintbrushImageReadyRef.current = true;
+      setPaintbrushImageLoadProgress(100);
+      setIsPaintbrushImageReady(true);
     };
 
-    void loadDimensions();
+    paintbrushImageReadyRef.current = false;
+    setIsPaintbrushImageReady(false);
+    setPaintbrushImageLoadProgress(0);
+    progressTimer = setInterval(() => {
+      setPaintbrushImageLoadProgress((prev) => {
+        if (prev >= 94) return prev;
+        const next = prev < 48 ? prev + 4 : prev + 2;
+        return Math.min(94, next);
+      });
+    }, 90);
+
+    const img = new Image();
+    img.decoding = "async";
+    img.onload = () => {
+      setDimensions(img.naturalWidth, img.naturalHeight);
+      if (typeof img.decode === "function") {
+        img
+          .decode()
+          .catch(() => {
+            // decode() can fail in some browsers even after onload.
+          })
+          .finally(finishLoad);
+        return;
+      }
+      finishLoad();
+    };
+    img.onerror = () => {
+      // Don't block interaction forever on bad responses.
+      finishLoad();
+    };
+    img.src = drawImage;
+    if (img.complete && img.naturalWidth > 0) {
+      setDimensions(img.naturalWidth, img.naturalHeight);
+      finishLoad();
+    }
 
     return () => {
       cancelled = true;
+      if (progressTimer) {
+        clearInterval(progressTimer);
+      }
     };
   }, [drawImage]);
 
@@ -534,6 +576,10 @@ export default function CategoryGallery({
       toStagePositionFromClient(event.clientX, event.clientY);
 
     const revealSquareAtPosition = (x: number, y: number) => {
+      if (!paintbrushImageReadyRef.current) {
+        return;
+      }
+
       if (revealCompletionTriggeredRef.current) {
         return;
       }
@@ -711,6 +757,7 @@ export default function CategoryGallery({
     };
 
     const handleMouseDown = (event: MouseEvent) => {
+      if (!paintbrushImageReadyRef.current) return;
       const position = toStagePosition(event);
       if (!position || !position.inside) return;
       isMouseDownRef.current = true;
@@ -732,6 +779,7 @@ export default function CategoryGallery({
     };
 
     const handleClick = (event: MouseEvent) => {
+      if (!paintbrushImageReadyRef.current) return;
       if (Date.now() - lastTouchTimestampRef.current < 420) {
         return;
       }
@@ -743,6 +791,7 @@ export default function CategoryGallery({
     };
 
     const handleTouchStart = (event: TouchEvent) => {
+      if (!paintbrushImageReadyRef.current) return;
       if (event.touches.length === 0) return;
       lastTouchTimestampRef.current = Date.now();
       const touch = event.touches[0];
@@ -843,6 +892,10 @@ export default function CategoryGallery({
   };
 
   const isRevealFinal = isRevealComplete && !isRevealCelebrating;
+  const paintbrushLoadPercent = Math.max(
+    0,
+    Math.min(100, Math.round(paintbrushImageLoadProgress))
+  );
 
   const shellClassName = `artist-subpage-shell category-shell${
     showSubpageLoader ? " is-subpage-loading" : ""
@@ -865,20 +918,20 @@ export default function CategoryGallery({
                   srcSet={responsiveSrcSet(image.src)}
                   sizes="(max-width: 600px) 100vw, (max-width: 900px) 50vw, 25vw"
                   alt={image.alt}
-                  loading={index < criticalSubpageImageCount ? "eager" : "lazy"}
+                  loading={index < trackedSubpageImageCount ? "eager" : "lazy"}
                   decoding="async"
                   ref={
-                    index < criticalSubpageImageCount
+                    index < trackedSubpageImageCount
                       ? (node) => registerCriticalTileRef(index, node)
                       : undefined
                   }
                   onLoad={
-                    index < criticalSubpageImageCount
+                    index < trackedSubpageImageCount
                       ? () => markCriticalImageReady(index)
                       : undefined
                   }
                   onError={
-                    index < criticalSubpageImageCount
+                    index < trackedSubpageImageCount
                       ? () => markCriticalImageReady(index)
                       : undefined
                   }
@@ -914,11 +967,27 @@ export default function CategoryGallery({
         >
           <div
             className={`category-brush-stage category-brush-page${
+              !isPaintbrushImageReady ? " is-draw-loading" : ""
+            }${
               isRevealCelebrating ? " is-reveal-celebrating" : ""
             }${isRevealFinal ? " is-reveal-final" : ""}`}
             ref={stageRef}
           >
-            <p className="category-brush-instruction">Click &amp; Drag to Reveal the Image.</p>
+            <p className="category-brush-instruction">
+              {isPaintbrushImageReady
+                ? "Click & Drag to Reveal the Image."
+                : "Loading Reveal Image..."}
+            </p>
+            {!isPaintbrushImageReady ? (
+              <div
+                className="category-brush-loading-badge"
+                role="status"
+                aria-live="polite"
+                aria-label={`Reveal image loading ${paintbrushLoadPercent}%`}
+              >
+                {paintbrushLoadPercent}%
+              </div>
+            ) : null}
 
             {revealedSquares.map((square) => {
               const squareCenterX = square.x + squareSize / 2;
@@ -981,23 +1050,25 @@ export default function CategoryGallery({
               }}
             />
 
-            <div
-              className="category-brush-cursor"
-              ref={cursorRef}
-              aria-hidden="true"
-            >
-              <svg fill="none" preserveAspectRatio="none" viewBox="0 0 48 48">
-                {CURSOR_DOTS.map((dot, index) => (
-                  <circle
-                    key={`dot-${index}`}
-                    cx={dot.cx}
-                    cy={dot.cy}
-                    r="2.9"
-                    fill="#7ad8ff"
-                  />
-                ))}
-              </svg>
-            </div>
+            {isPaintbrushImageReady ? (
+              <div
+                className="category-brush-cursor"
+                ref={cursorRef}
+                aria-hidden="true"
+              >
+                <svg fill="none" preserveAspectRatio="none" viewBox="0 0 48 48">
+                  {CURSOR_DOTS.map((dot, index) => (
+                    <circle
+                      key={`dot-${index}`}
+                      cx={dot.cx}
+                      cy={dot.cy}
+                      r="2.9"
+                      fill="#7ad8ff"
+                    />
+                  ))}
+                </svg>
+              </div>
+            ) : null}
           </div>
         </section>
       </main>
