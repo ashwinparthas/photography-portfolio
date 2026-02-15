@@ -328,7 +328,7 @@ img {
   .artist-subpage-footer-name {
     font-size: clamp(4rem, 26vw, 9rem);
     letter-spacing: -0.04em;
-    transform: translateY(20%);
+    transform: translateY(1%);
   }
 
   .artist-subpage-footer-bar {
@@ -356,7 +356,7 @@ img {
     font-size: clamp(3.45rem, 21vw, 7.4rem);
     line-height: 0.68;
     letter-spacing: -0.035em;
-    transform: translate(-50%, 20%);
+    transform: translate(-50%, 1%);
   }
 
   .artist-subpage-link-stack {
