@@ -857,7 +857,7 @@ img {
   max-width: 100%;
   max-height: 100%;
   overflow: hidden;
-  background: #111111;
+  background: rgba(17, 17, 17, 0.68);
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.42);
 }
 
