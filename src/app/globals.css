@@ -1042,7 +1042,8 @@ img {
   flex-direction: row;
   align-items: center;
   gap: 10px;
-  min-width: 220px;
+  min-width: 0;
+  width: fit-content;
 }
 
 .library-overview-wheel {
@@ -1053,6 +1054,12 @@ img {
   border-top-color: rgba(255, 255, 255, 0.95);
   animation: library-overview-spin 0.8s linear infinite;
   flex: 0 0 auto;
+}
+
+.library-overview-progress {
+  min-width: 4ch;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 @keyframes library-overview-spin {

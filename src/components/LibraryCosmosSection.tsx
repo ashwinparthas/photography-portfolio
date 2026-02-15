@@ -681,9 +681,10 @@ export default function LibraryCosmosSection({
                 className="library-overview-loader library-overlay-box"
                 role="status"
                 aria-live="polite"
+                aria-label={`Image loading ${overviewLoadProgress}%`}
               >
                 <span className="library-overview-wheel" aria-hidden="true" />
-                <span>Optimizing drag speed... {overviewLoadProgress}%</span>
+                <span className="library-overview-progress">{overviewLoadProgress}%</span>
               </div>
             ) : null}
 
