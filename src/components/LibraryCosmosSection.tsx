@@ -194,6 +194,7 @@ export default function LibraryCosmosSection({
   const [isOverviewOptimized, setIsOverviewOptimized] = useState(false);
   const [overviewLoadCount, setOverviewLoadCount] = useState(0);
   const overviewPreloadStartedRef = useRef(false);
+  const hasInitializedViewRef = useRef(false);
   const fitToViewportZoom = useMemo(() => {
     const fitByWidth = viewport.width / layout.canvasWidth;
     const fitByHeight = viewport.height / layout.canvasHeight;
@@ -222,6 +223,25 @@ export default function LibraryCosmosSection({
   const connectionMarkerHeight = Number((10 * connectionVisibilityScale).toFixed(2));
   const maxOffsetX = Math.max(0, layout.canvasWidth * zoomLevel - viewport.width);
   const maxOffsetY = Math.max(0, layout.canvasHeight * zoomLevel - viewport.height);
+  const mobileInitialFocusCard = useMemo(() => {
+    if (layout.cards.length === 0) return null;
+    const targetX = layout.canvasWidth / 2;
+    const targetY = layout.canvasHeight / 2;
+    let nearestCard = layout.cards[0];
+    let nearestDistance = Number.POSITIVE_INFINITY;
+
+    layout.cards.forEach((card) => {
+      const centerX = card.x + (card.width + NODE_EXTRA_WIDTH) / 2;
+      const centerY = card.y + (card.height + NODE_EXTRA_HEIGHT) / 2;
+      const distance = Math.hypot(centerX - targetX, centerY - targetY);
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        nearestCard = card;
+      }
+    });
+
+    return nearestCard;
+  }, [layout.canvasHeight, layout.canvasWidth, layout.cards]);
 
   useEffect(() => {
     if (!isZoomedOutOverview || isOverviewOptimized || overviewPreloadStartedRef.current) {
@@ -422,13 +442,42 @@ export default function LibraryCosmosSection({
   }, []);
 
   useEffect(() => {
-    canvasX.set(0);
-    canvasY.set(0);
-    setCanvasPosition({
-      x: viewport.width / 2,
-      y: viewport.height / 2
-    });
-  }, [canvasX, canvasY, viewport.height, viewport.width]);
+    if (hasInitializedViewRef.current) return;
+    if (viewport.width <= 0 || viewport.height <= 0) return;
+    const element = viewportRef.current;
+    if (!element) return;
+    if (element.clientWidth !== viewport.width || element.clientHeight !== viewport.height) {
+      return;
+    }
+
+    let nextOffsetX = 0;
+    let nextOffsetY = 0;
+    if (viewport.width <= 900 && mobileInitialFocusCard) {
+      const focusX =
+        mobileInitialFocusCard.x + (mobileInitialFocusCard.width + NODE_EXTRA_WIDTH) / 2;
+      const focusY =
+        mobileInitialFocusCard.y + (mobileInitialFocusCard.height + NODE_EXTRA_HEIGHT) / 2;
+      const visibleX = focusX * zoomLevel - viewport.width / 2;
+      const visibleY = focusY * zoomLevel - viewport.height / 2;
+      nextOffsetX = -clamp(visibleX, 0, maxOffsetX);
+      nextOffsetY = -clamp(visibleY, 0, maxOffsetY);
+    }
+
+    canvasX.set(nextOffsetX);
+    canvasY.set(nextOffsetY);
+    updateViewportPosition(nextOffsetX, nextOffsetY);
+    hasInitializedViewRef.current = true;
+  }, [
+    canvasX,
+    canvasY,
+    maxOffsetX,
+    maxOffsetY,
+    mobileInitialFocusCard,
+    updateViewportPosition,
+    viewport.height,
+    viewport.width,
+    zoomLevel
+  ]);
 
   useEffect(() => {
     const nextX = clamp(canvasX.get(), -maxOffsetX, 0);

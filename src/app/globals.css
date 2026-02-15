@@ -346,6 +346,33 @@ img {
   }
 }
 
+@media (max-width: 900px) and (orientation: portrait) and (hover: none) and (pointer: coarse) {
+  .artist-subpage-footer-name {
+    left: 50%;
+    right: auto;
+    width: max-content;
+    max-width: calc(100% - 28px);
+    text-align: center;
+    font-size: clamp(3.45rem, 21vw, 7.4rem);
+    line-height: 0.68;
+    letter-spacing: -0.035em;
+    transform: translate(-50%, 34%);
+  }
+
+  .artist-subpage-link-stack {
+    top: 12px;
+    right: 14px;
+  }
+
+  .artist-subpage-link-group {
+    gap: 6px;
+  }
+
+  .artist-subpage-link-group-spaced {
+    margin-top: 10px;
+  }
+}
+
 .intro {
   position: fixed;
   inset: 0 auto 0 0;
@@ -1129,6 +1156,7 @@ img {
     width: min(680px, 100%);
     height: 100%;
     min-height: 280px;
+    background: rgba(17, 17, 17, 0.68);
   }
 
   .library-overlay-box {
@@ -2261,6 +2289,7 @@ img {
     width: min(680px, 100%);
     height: 100%;
     min-height: 320px;
+    background: rgba(17, 17, 17, 0.68);
   }
 
   .library-instruction {
@@ -2374,6 +2403,7 @@ img {
     width: min(960px, 100%);
     height: 100%;
     min-height: 260px;
+    background: rgba(17, 17, 17, 0.74);
   }
 
   .library-overlay-box {
