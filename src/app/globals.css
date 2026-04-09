@@ -889,11 +889,15 @@ img {
 }
 
 .library-connection-edge {
-  stroke: rgba(255, 255, 255, 0.96);
+  stroke: rgba(255, 255, 255, 0.45);
   stroke-linecap: round;
   stroke-linejoin: round;
-  opacity: 0.98;
-  filter: drop-shadow(0 0 1.4px rgba(255, 255, 255, 0.55));
+  stroke-dasharray: 8 6;
+  animation: library-dash-flow 12s linear infinite;
+}
+
+@keyframes library-dash-flow {
+  to { stroke-dashoffset: -56; }
 }
 
 .library-node {
@@ -2058,7 +2062,7 @@ img {
 }
 
 .artist-library-intro .artist-library-title {
-  --header-outline-color: #c93a3a;
+  --header-outline-color: #a8b8a0;
   margin-inline: auto;
 }
 

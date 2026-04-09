@@ -28,6 +28,7 @@ type LibraryConnection = {
   y1: number;
   x2: number;
   y2: number;
+  path: string;
 };
 
 type DragInfo = {
@@ -52,10 +53,10 @@ const HALFTONE_EFFECTS = [
 
 type HalftoneEffect = (typeof HALFTONE_EFFECTS)[number];
 
-const HALFTONE_DENSITY = 35;
-const HALFTONE_SIZE = 35;
-const HALFTONE_INTENSITY = 65;
-const HALFTONE_SPEED = 1.2;
+const HALFTONE_DENSITY = 30;
+const HALFTONE_SIZE = 30;
+const HALFTONE_INTENSITY = 50;
+const HALFTONE_SPEED = 0.72;
 const ABSOLUTE_MIN_ZOOM = 0.22;
 const MAX_ZOOM = 2.4;
 const ZOOM_STEP = 0.2;
@@ -113,13 +114,22 @@ const buildEdgeFromCards = (
   const startOffset = Math.min(fromWidth / 2 / safeAbsX, fromHeight / 2 / safeAbsY);
   const endOffset = Math.min(toWidth / 2 / safeAbsX, toHeight / 2 / safeAbsY);
 
-  return {
-    id,
-    x1: fromCenterX + ux * startOffset,
-    y1: fromCenterY + uy * startOffset,
-    x2: toCenterX - ux * endOffset,
-    y2: toCenterY - uy * endOffset
-  };
+  const x1 = fromCenterX + ux * startOffset;
+  const y1 = fromCenterY + uy * startOffset;
+  const x2 = toCenterX - ux * endOffset;
+  const y2 = toCenterY - uy * endOffset;
+
+  const midX = (x1 + x2) / 2;
+  const midY = (y1 + y2) / 2;
+  const curvature = distance * 0.18;
+  const cx1 = midX - uy * curvature;
+  const cy1 = midY + ux * curvature;
+  const cx2 = midX + uy * curvature * 0.4;
+  const cy2 = midY - ux * curvature * 0.4;
+
+  const path = `M${x1},${y1} C${cx1},${cy1} ${cx2},${cy2} ${x2},${y2}`;
+
+  return { id, x1, y1, x2, y2, path };
 };
 
 const buildDynamicLibraryLayout = (count: number): DynamicLibraryLayout => {
@@ -171,7 +181,6 @@ export default function LibraryCosmosSection({
     [albums.length]
   );
   const viewportRef = useRef<HTMLDivElement | null>(null);
-  const markerId = "library-cosmos-marker";
   const [viewport, setViewport] = useState({ width: 760, height: 900 });
   const [canvasPosition, setCanvasPosition] = useState({
     x: 500,
@@ -202,7 +211,7 @@ export default function LibraryCosmosSection({
     return Math.min(fitByWidth, fitByHeight);
   }, [layout.canvasHeight, layout.canvasWidth, viewport.height, viewport.width]);
   const minZoomLevel = useMemo(
-    () => clamp(Number((fitToViewportZoom * 0.98).toFixed(2)), ABSOLUTE_MIN_ZOOM, 1),
+    () => clamp(Number((fitToViewportZoom * 0.98 + ZOOM_STEP).toFixed(2)), ABSOLUTE_MIN_ZOOM + ZOOM_STEP, 1),
     [fitToViewportZoom]
   );
   const isZoomedOutOverview = zoomLevel <= minZoomLevel + OVERVIEW_MODE_ZOOM_BUFFER;
@@ -219,9 +228,7 @@ export default function LibraryCosmosSection({
       ? Math.min(100, Math.round((overviewLoadCount / overviewSources.length) * 100))
       : 0;
   const connectionVisibilityScale = clamp(1 / Math.max(zoomLevel, 0.0001), 1, 3.2);
-  const connectionStrokeWidth = Number((2.4 * connectionVisibilityScale).toFixed(2));
-  const connectionMarkerWidth = Number((10 * connectionVisibilityScale).toFixed(2));
-  const connectionMarkerHeight = Number((10 * connectionVisibilityScale).toFixed(2));
+  const connectionStrokeWidth = Number((1.6 * connectionVisibilityScale).toFixed(2));
   const maxOffsetX = Math.max(0, layout.canvasWidth * zoomLevel - viewport.width);
   const maxOffsetY = Math.max(0, layout.canvasHeight * zoomLevel - viewport.height);
   const mobileInitialFocusCard = useMemo(() => {
@@ -278,9 +285,7 @@ export default function LibraryCosmosSection({
   }, [isOverviewOptimized, isZoomedOutOverview, overviewSources]);
 
   useEffect(() => {
-    setHalftoneEffect(
-      HALFTONE_EFFECTS[Math.floor(Math.random() * HALFTONE_EFFECTS.length)]
-    );
+    setHalftoneEffect("wave");
   }, []);
 
   useEffect(() => {
@@ -558,8 +563,8 @@ export default function LibraryCosmosSection({
                 speed={HALFTONE_SPEED}
                 colorMode="mono"
                 backgroundColor="#fafafa"
-                foregroundColor="#c93a3a"
-                gradientColor="#c93a3a"
+                foregroundColor="#a8b8a0"
+                gradientColor="#a8b8a0"
                 isAnimated={true}
                 mouseInteractive={true}
                 morphing={false}
@@ -618,34 +623,27 @@ export default function LibraryCosmosSection({
                     viewBox={`0 0 ${layout.canvasWidth} ${layout.canvasHeight}`}
                     aria-hidden="true"
                   >
-                    <defs>
-                      <marker
-                        id={markerId}
-                        viewBox="0 0 8.5 8.5"
-                        markerWidth={connectionMarkerWidth}
-                        markerHeight={connectionMarkerHeight}
-                        refX="7.5"
-                        refY="4.25"
-                        orient="auto"
-                        markerUnits="userSpaceOnUse"
-                      >
-                        <path
-                          d="M0,0 L8.5,4.25 L0,8.5 z"
-                          fill="rgba(255, 255, 255, 0.98)"
-                        />
-                      </marker>
-                    </defs>
                     {connections.map((edge) => (
-                      <line
-                        key={edge.id}
-                        className="library-connection-edge"
-                        style={{ strokeWidth: connectionStrokeWidth }}
-                        x1={edge.x1}
-                        y1={edge.y1}
-                        x2={edge.x2}
-                        y2={edge.y2}
-                        markerEnd={`url(#${markerId})`}
-                      />
+                      <g key={edge.id}>
+                        <path
+                          className="library-connection-edge"
+                          d={edge.path}
+                          fill="none"
+                          style={{ strokeWidth: connectionStrokeWidth }}
+                        />
+                        <circle
+                          cx={edge.x1}
+                          cy={edge.y1}
+                          r={Math.max(3, connectionStrokeWidth * 1.5)}
+                          fill="rgba(255, 255, 255, 0.7)"
+                        />
+                        <circle
+                          cx={edge.x2}
+                          cy={edge.y2}
+                          r={Math.max(3, connectionStrokeWidth * 1.5)}
+                          fill="rgba(255, 255, 255, 0.7)"
+                        />
+                      </g>
                     ))}
                   </svg>
                 ) : null}
