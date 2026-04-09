@@ -6,6 +6,7 @@ import { PatternCanvas } from "@/components/halftone/PatternCanvas";
 import { ALL_ALBUMS } from "@/lib/photoData";
 import { responsiveSrc, responsiveSrcSet } from "@/lib/responsiveImage";
 import { withBasePath } from "@/lib/basePath";
+import { EASE_EDITORIAL } from "@/lib/motion";
 
 type DynamicAlbumCard = {
   index: number;
@@ -660,21 +661,21 @@ export default function LibraryCosmosSection({
                         top: `${card.y}px`,
                         width: `${card.width + 16}px`
                       }}
-                      initial={{ opacity: 0, scale: 0.9 }}
+                      initial={{ opacity: 0, scale: 0.95 }}
                       animate={{ opacity: 1, scale: 1 }}
                       transition={{
-                        duration: 0.5,
+                        duration: 0.6,
+                        ease: EASE_EDITORIAL,
                         delay: Math.min(0.35, order * 0.012)
                       }}
                       whileHover={
                         useCompactNodes
                           ? undefined
                           : {
-                              scale: 1.02,
+                              scale: 1.015,
                               transition: {
-                                duration: 0.2,
-                                type: "spring",
-                                stiffness: 400
+                                duration: 0.3,
+                                ease: EASE_EDITORIAL
                               }
                             }
                       }

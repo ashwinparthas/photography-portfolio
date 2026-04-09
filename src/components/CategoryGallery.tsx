@@ -1,10 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { motion } from "motion/react";
 import SubpageHeader from "@/components/SubpageHeader";
 import SubpageFooter from "@/components/SubpageFooter";
 import { withBasePath } from "@/lib/basePath";
 import { responsiveSrc, responsiveSrcSet } from "@/lib/responsiveImage";
+import { EASE_EDITORIAL } from "@/lib/motion";
 
 type ImageItem = {
   src: string;
@@ -279,8 +281,8 @@ export default function CategoryGallery({
       }
 
       const elapsed = performance.now() - loaderStartTime;
-      const minimumLoaderTimeMs = isWarmSession ? 700 : 1200;
-      const artifactTimeoutMs = isWarmSession ? 3200 : 5600;
+      const minimumLoaderTimeMs = isWarmSession ? 400 : 700;
+      const artifactTimeoutMs = isWarmSession ? 2000 : 3500;
       const remainingMinimumLoaderMs = Math.max(0, minimumLoaderTimeMs - elapsed);
       await Promise.all([
         remainingMinimumLoaderMs > 0
@@ -290,11 +292,11 @@ export default function CategoryGallery({
       ]);
 
       if (cancelled) return;
-      await wait(isWarmSession ? 40 : 70);
+      await wait(isWarmSession ? 30 : 50);
       if (cancelled) return;
 
       setIsSubpageLoaderExiting(true);
-      const exitAnimationMs = isWarmSession ? 360 : 440;
+      const exitAnimationMs = isWarmSession ? 250 : 350;
 
       exitTimer = setTimeout(() => {
         if (cancelled) return;
@@ -913,7 +915,14 @@ export default function CategoryGallery({
         >
           <div className="category-grid">
             {images.map((image, index) => (
-              <article key={`${image.alt}-${index}`} className="category-tile">
+              <motion.article
+                key={`${image.alt}-${index}`}
+                className="category-tile"
+                initial={{ opacity: 0, y: 24 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, margin: "-60px" }}
+                transition={{ duration: 0.65, ease: EASE_EDITORIAL }}
+              >
                 <img
                   src={responsiveSrc(image.src)}
                   srcSet={responsiveSrcSet(image.src)}
@@ -945,7 +954,7 @@ export default function CategoryGallery({
                     setLightbox({ index });
                   }}
                 />
-              </article>
+              </motion.article>
             ))}
           </div>
           {images.length === 0 && (

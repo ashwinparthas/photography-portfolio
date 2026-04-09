@@ -2,11 +2,13 @@
 
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { motion } from "motion/react";
 import CollectionsDropdown from "@/components/CollectionsDropdown";
 import SubpageFooter from "@/components/SubpageFooter";
 import { responsiveSrc, responsiveSrcSet } from "@/lib/responsiveImage";
 import { FEATURED_PHOTOS } from "@/lib/photoData";
 import { withBasePath } from "@/lib/basePath";
+import { EASE_EDITORIAL, STAGGER_OFFSET } from "@/lib/motion";
 
 const SOCIAL_LINKS = {
   instagram: "https://www.instagram.com/ashwin.parthas",
@@ -228,7 +230,7 @@ export default function Home() {
         queueHeroImageRenderedFromNode(index, node);
       }
     });
-    const steadyFillDurationMs = isWarmSession ? 1000 : 1900;
+    const steadyFillDurationMs = isWarmSession ? 600 : 1000;
 
     const wait = (durationMs: number) =>
       new Promise<void>((resolve) => {
@@ -408,18 +410,18 @@ export default function Home() {
       const elapsed = performance.now() - loaderStartTime;
       const minimumLoaderTimeMs = isMobileLoader
         ? isWarmSession
-          ? 1100
-          : 1800
+          ? 700
+          : 1000
         : isWarmSession
-          ? 1500
-          : 2600;
+          ? 800
+          : 1200;
       const artifactTimeoutMs = isMobileLoader
         ? isWarmSession
-          ? 4000
-          : 6500
+          ? 2500
+          : 4000
         : isWarmSession
-          ? 1600
-          : 3000;
+          ? 1200
+          : 2000;
       const remainingMinimumDurationMs = Math.max(0, minimumLoaderTimeMs - elapsed);
       await Promise.all([
         remainingMinimumDurationMs > 0
@@ -431,7 +433,7 @@ export default function Home() {
       ]);
 
       if (cancelled) return;
-      await wait(isWarmSession ? 120 : 220);
+      await wait(isWarmSession ? 60 : 100);
       if (cancelled) return;
 
       if (progressFrame) {
@@ -440,8 +442,8 @@ export default function Home() {
       }
 
       const completionFrom = loaderProgressRef.current;
-      const completionDurationMs = isWarmSession ? 240 : 420;
-      const exitDelayMs = isWarmSession ? 110 : 180;
+      const completionDurationMs = isWarmSession ? 180 : 280;
+      const exitDelayMs = isWarmSession ? 80 : 120;
       const completionStart = performance.now();
       const completeProgress = (now: number) => {
         if (cancelled) return;
@@ -710,40 +712,77 @@ export default function Home() {
     <div className="artist-home-shell">
       <main className="artist-home-main">
         <section className="artist-landing" id="top">
-          <header className="artist-header">
+          <motion.header
+            className="artist-header"
+            initial={{ opacity: 0, y: 16 }}
+            animate={!showInitialLoader ? { opacity: 1, y: 0 } : undefined}
+            transition={{ duration: 0.7, ease: EASE_EDITORIAL }}
+          >
             <div className="artist-header-gradient" aria-hidden="true">
               <FooterGradientShader />
             </div>
-            <h1 className="artist-wordmark">
+            <motion.h1
+              className="artist-wordmark"
+              initial={{ opacity: 0, y: 10 }}
+              animate={!showInitialLoader ? { opacity: 1, y: 0 } : undefined}
+              transition={{ duration: 0.6, ease: EASE_EDITORIAL, delay: STAGGER_OFFSET }}
+            >
               Ashwin
               <br />
               Parthasarathy
-            </h1>
-            <p className="artist-origin">
+            </motion.h1>
+            <motion.p
+              className="artist-origin"
+              initial={{ opacity: 0, y: 8 }}
+              animate={!showInitialLoader ? { opacity: 1, y: 0 } : undefined}
+              transition={{ duration: 0.6, ease: EASE_EDITORIAL, delay: STAGGER_OFFSET * 2 }}
+            >
               2024 • Present
               <br />
               San Francisco, CA
-            </p>
-            <CollectionsDropdown className="artist-nav" links={CATEGORY_LINKS} />
-            <div className="artist-language">
+            </motion.p>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={!showInitialLoader ? { opacity: 1 } : undefined}
+              transition={{ duration: 0.5, ease: EASE_EDITORIAL, delay: STAGGER_OFFSET * 3 }}
+            >
+              <CollectionsDropdown className="artist-nav" links={CATEGORY_LINKS} />
+            </motion.div>
+            <motion.div
+              className="artist-language"
+              initial={{ opacity: 0 }}
+              animate={!showInitialLoader ? { opacity: 1 } : undefined}
+              transition={{ duration: 0.5, ease: EASE_EDITORIAL, delay: STAGGER_OFFSET * 4 }}
+            >
               <a href={SOCIAL_LINKS.instagram} target="_blank" rel="noreferrer">
                 Instagram
               </a>
               <a href={SOCIAL_LINKS.linkedin} target="_blank" rel="noreferrer">
                 LinkedIn
               </a>
-            </div>
-          </header>
+            </motion.div>
+          </motion.header>
           <div className="artist-header-rule" />
 
           <section className="artist-hero" aria-labelledby="artist-hero-title">
-            <h2 id="artist-hero-title">
+            <motion.h2
+              id="artist-hero-title"
+              initial={{ opacity: 0, y: 20 }}
+              animate={!showInitialLoader ? { opacity: 1, y: 0 } : undefined}
+              transition={{ duration: 0.8, ease: EASE_EDITORIAL, delay: 0.12 }}
+            >
               <span className="artist-hero-quote">
                 "You don't take a photograph, you make it."
               </span>
               <span className="artist-hero-cite">- Ansel Adams</span>
-            </h2>
-            <div className="artist-hero-wheel" ref={heroWheelRef}>
+            </motion.h2>
+            <motion.div
+              className="artist-hero-wheel"
+              ref={heroWheelRef}
+              initial={{ opacity: 0, y: 24, scale: 0.98 }}
+              animate={!showInitialLoader ? { opacity: 1, y: 0, scale: 1 } : undefined}
+              transition={{ duration: 0.9, ease: EASE_EDITORIAL, delay: 0.22 }}
+            >
               {FEATURED_PHOTOS.map((photo, index) => (
                 <article key={`${photo.title}-${index}`} className="artist-wheel-card">
                   <img
@@ -773,13 +812,21 @@ export default function Home() {
                   />
                 </article>
               ))}
-            </div>
+            </motion.div>
           </section>
 
-          <section className="artist-library-intro" id="library" aria-label="Library">
+          <motion.section
+            className="artist-library-intro"
+            id="library"
+            aria-label="Library"
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: "-80px" }}
+            transition={{ duration: 0.7, ease: EASE_EDITORIAL }}
+          >
             <div className="artist-library-rule" aria-hidden="true" />
             <h2 className="artist-library-title">Library</h2>
-          </section>
+          </motion.section>
 
           <div ref={libraryMountRef} aria-hidden="true" />
           {showLibrarySection ? (
@@ -788,10 +835,18 @@ export default function Home() {
             <div aria-hidden="true" style={LIBRARY_PLACEHOLDER_STYLE} />
           )}
 
-          <section className="artist-jukebox-intro" id="jukebox" aria-label="Jukebox">
+          <motion.section
+            className="artist-jukebox-intro"
+            id="jukebox"
+            aria-label="Jukebox"
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: "-80px" }}
+            transition={{ duration: 0.7, ease: EASE_EDITORIAL }}
+          >
             <div className="artist-library-vinyl-rule" aria-hidden="true" />
             <h2 className="artist-library-title">Jukebox</h2>
-          </section>
+          </motion.section>
           <div ref={jukeboxMountRef} aria-hidden="true" />
           {showJukeboxSection ? (
             <VinylPlayerSection onReady={handleVinylReady} />
