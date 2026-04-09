@@ -154,7 +154,7 @@ function VinylRecordMobile({
       {/* Main vinyl record image */}
       <div className="absolute left-0 size-[294.65px] top-0">
         <div className="absolute inset-[-7.39%_-4.2%_-3.52%_-6.71%]">
-          <img className="block max-w-none size-full" height="326.799" src={imgEllipse1.src} width="326.799" />
+          <img className="block max-w-none size-full" height="326.799" src={imgEllipse1.src} width="326.799" alt="" />
         </div>
       </div>
 
@@ -428,7 +428,7 @@ export function VinylPlayerMobile({
       hasStartedRef.current = false;
       lastTrackRef.current = currentTrack.title;
     }
-  }, [isPlaying, speedIndex, speedSettings, currentTrack.title]);
+  }, [isPlaying, setIsPlaying, speedIndex, speedSettings, currentTrack.title]);
 
   // Update playback rate when speed changes during playback
   useEffect(() => {
@@ -461,7 +461,7 @@ export function VinylPlayerMobile({
         }
       }
     }
-  }, [currentAlbumId, currentTrack.title]);
+  }, [currentAlbumId, currentTrack.title, isPlaying, setIsPlaying]);
 
   useEffect(() => {
     return () => {

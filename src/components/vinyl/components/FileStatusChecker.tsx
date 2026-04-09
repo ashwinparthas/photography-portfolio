@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { withBasePath } from "@/lib/basePath";
 
 interface FileStatusCheckerProps {
@@ -6,19 +6,19 @@ interface FileStatusCheckerProps {
   onClose: () => void;
 }
 
+const requiredFiles: Record<string, string> = {
+  "/songs/gravity.mp3": "Gravity - Brent Faiyaz (WASTELAND)",
+  "/songs/vivid-dreams.mp3": "VIVID DREAMS - KAYTRANADA (99.9%)",
+  "/songs/hereditary.mp3": "Hereditary - JID (The Never Story)",
+  "/songs/being-so-normal.mp3": "Being So Normal - Peach Pit (Being So Normal)",
+  "/songs/fallen.mp3": "Fallen - Mya (Moodring)"
+};
+
 export function FileStatusChecker({ isVisible, onClose }: FileStatusCheckerProps) {
   const [fileStatus, setFileStatus] = useState<{[key: string]: boolean}>({});
   const [checking, setChecking] = useState(false);
 
-  const requiredFiles = {
-    "/songs/gravity.mp3": "Gravity - Brent Faiyaz (WASTELAND)",
-    "/songs/vivid-dreams.mp3": "VIVID DREAMS - KAYTRANADA (99.9%)",
-    "/songs/hereditary.mp3": "Hereditary - JID (The Never Story)",
-    "/songs/being-so-normal.mp3": "Being So Normal - Peach Pit (Being So Normal)",
-    "/songs/fallen.mp3": "Fallen - Mya (Moodring)"
-  };
-
-  const checkFiles = async () => {
+  const checkFiles = useCallback(async () => {
     setChecking(true);
     const status: {[key: string]: boolean} = {};
 
@@ -46,19 +46,19 @@ export function FileStatusChecker({ isVisible, onClose }: FileStatusCheckerProps
       }
     };
 
-    for (const [path, _] of Object.entries(requiredFiles)) {
+    for (const [path] of Object.entries(requiredFiles)) {
       status[path] = await checkSingleFile(path);
     }
 
     setFileStatus(status);
     setChecking(false);
-  };
+  }, []);
 
   useEffect(() => {
     if (isVisible) {
       checkFiles();
     }
-  }, [isVisible]);
+  }, [isVisible, checkFiles]);
 
   if (!isVisible) return null;
 

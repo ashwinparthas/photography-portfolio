@@ -150,7 +150,7 @@ function VinylRecord({
     >
       <div className="absolute left-0 size-[398.051px] top-0">
         <div className="absolute inset-[-7.39%_-4.2%_-3.52%_-6.71%]">
-          <img className="block max-w-none size-full" height="441.481" src={imgEllipse1.src} width="441.481" />
+          <img className="block max-w-none size-full" height="441.481" src={imgEllipse1.src} width="441.481" alt="" />
         </div>
       </div>
       <div className="absolute left-[145px] size-[107.405px] top-[145px]">
@@ -424,7 +424,7 @@ export function VinylPlayer({
       hasStartedRef.current = false;
       lastTrackRef.current = currentTrack.title;
     }
-  }, [isPlaying, speedIndex, speedSettings, currentTrack.title]);
+  }, [isPlaying, setIsPlaying, speedIndex, speedSettings, currentTrack.title]);
 
   // Update playback rate when speed changes during playback
   useEffect(() => {
@@ -457,7 +457,7 @@ export function VinylPlayer({
         }
       }
     }
-  }, [currentAlbumId, currentTrack.title]);
+  }, [currentAlbumId, currentTrack.title, isPlaying, setIsPlaying]);
 
   // Cleanup timeout on unmount
   useEffect(() => {

@@ -548,9 +548,10 @@ export default function Home() {
     const track = heroWheelRef.current;
     if (!track) return;
 
-    scrollStateRef.current.target = track.scrollLeft;
-    scrollStateRef.current.current = track.scrollLeft;
-    scrollStateRef.current.lastTime = 0;
+    const scrollState = scrollStateRef.current;
+    scrollState.target = track.scrollLeft;
+    scrollState.current = track.scrollLeft;
+    scrollState.lastTime = 0;
 
     const toPixelDelta = (event: WheelEvent) => {
       const dominantDelta =
@@ -629,10 +630,9 @@ export default function Home() {
     return () => {
       track.removeEventListener("wheel", handleWheel);
       track.removeEventListener("scroll", handleTrackScroll);
-      const state = scrollStateRef.current;
-      if (state.frame) cancelAnimationFrame(state.frame);
-      state.frame = 0;
-      state.lastTime = 0;
+      if (scrollState.frame) cancelAnimationFrame(scrollState.frame);
+      scrollState.frame = 0;
+      scrollState.lastTime = 0;
     };
   }, []);
 

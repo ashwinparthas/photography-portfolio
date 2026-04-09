@@ -337,10 +337,13 @@ export default function CategoryGallery({
   }, [showSubpageLoader]);
 
   useEffect(() => {
-    squareTimeoutsRef.current.forEach((timeoutId) => clearTimeout(timeoutId));
-    squareTimeoutsRef.current.clear();
-    squareTimeoutsByKeyRef.current.clear();
-    revealPassesByKeyRef.current.clear();
+    const timeouts = squareTimeoutsRef.current;
+    const timeoutsByKey = squareTimeoutsByKeyRef.current;
+    const revealPassesByKey = revealPassesByKeyRef.current;
+    timeouts.forEach((timeoutId) => clearTimeout(timeoutId));
+    timeouts.clear();
+    timeoutsByKey.clear();
+    revealPassesByKey.clear();
     permanentSquareKeysRef.current.clear();
     revealCompletionTriggeredRef.current = false;
     setIsRevealCelebrating(false);
@@ -355,16 +358,14 @@ export default function CategoryGallery({
     }
     setRevealedSquares([]);
     squareCounter.current = 0;
-  }, [currentCategory, images]);
 
-  useEffect(() => {
     return () => {
-      squareTimeoutsRef.current.forEach((timeoutId) => clearTimeout(timeoutId));
-      squareTimeoutsRef.current.clear();
-      squareTimeoutsByKeyRef.current.clear();
-      revealPassesByKeyRef.current.clear();
+      timeouts.forEach((timeoutId) => clearTimeout(timeoutId));
+      timeouts.clear();
+      timeoutsByKey.clear();
+      revealPassesByKey.clear();
     };
-  }, []);
+  }, [currentCategory, images]);
 
   useEffect(() => {
     return () => {

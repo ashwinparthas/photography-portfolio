@@ -673,6 +673,7 @@ export default function App() {
 
     // Execute the async handler
     handleAudioChange();
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- audio helpers use refs internally and are stable
   }, [
     isPlaying,
     currentTrack,

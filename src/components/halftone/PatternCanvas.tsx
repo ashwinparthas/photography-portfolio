@@ -37,6 +37,7 @@ export function PatternCanvas({
   const animationRef = useRef<number>(0);
   const mouseRef = useRef({ x: 0, y: 0 });
   const timeRef = useRef(0);
+  const renderRef = useRef<() => void>(() => {});
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
 
   // Measure the real canvas box so interactions stay aligned in embedded sections.
@@ -140,9 +141,9 @@ export function PatternCanvas({
     return `rgb(${r}, ${g}, ${b})`;
   };
 
-  const getColor = (x: number, y: number, distance: number = 0): string => {
+  const getColor = useCallback((_x: number, _y: number, _distance: number = 0): string => {
     return foregroundColor;
-  };
+  }, [foregroundColor]);
 
   // Shape drawing functions with better anti-aliasing
   const drawShape = (ctx: CanvasRenderingContext2D, x: number, y: number, radius: number, shape: string) => {
@@ -434,7 +435,7 @@ export function PatternCanvas({
         }
       }
     }
-  }, [density, size, intensity, speed, colorMode, foregroundColor, gradientColor, isAnimated, mouseInteractive, morphing, dimensions, dotShape, animationEffect]);
+  }, [density, size, intensity, speed, isAnimated, mouseInteractive, morphing, dimensions, dotShape, animationEffect, getColor]);
 
   const drawWaves = useCallback((ctx: CanvasRenderingContext2D, time: number) => {
     const canvasWidth = dimensions.width;
@@ -459,7 +460,7 @@ export function PatternCanvas({
       ctx.fillStyle = getColor(x, finalY, distance);
       ctx.fillRect(x, Math.min(baseY, finalY), 2, Math.abs(finalY - baseY) + 1);
     }
-  }, [density, size, speed, mouseInteractive, colorMode, foregroundColor, gradientColor, dimensions]);
+  }, [density, size, speed, mouseInteractive, dimensions, getColor]);
 
   const drawSpiral = useCallback((ctx: CanvasRenderingContext2D, time: number) => {
     const canvasWidth = dimensions.width;
@@ -494,7 +495,7 @@ export function PatternCanvas({
         }
       }
     }
-  }, [density, size, intensity, speed, mouseInteractive, colorMode, foregroundColor, gradientColor, dimensions]);
+  }, [density, size, intensity, speed, mouseInteractive, dimensions, getColor]);
 
   const drawNoise = useCallback((ctx: CanvasRenderingContext2D, time: number) => {
     const canvasWidth = dimensions.width;
@@ -525,7 +526,7 @@ export function PatternCanvas({
         }
       }
     }
-  }, [density, size, intensity, speed, mouseInteractive, colorMode, foregroundColor, gradientColor, dimensions]);
+  }, [density, size, intensity, speed, mouseInteractive, dimensions, getColor]);
 
   const drawGrid = useCallback((ctx: CanvasRenderingContext2D, time: number) => {
     const canvasWidth = dimensions.width;
@@ -573,7 +574,7 @@ export function PatternCanvas({
     }
     
     ctx.globalAlpha = 1;
-  }, [density, size, intensity, speed, mouseInteractive, colorMode, foregroundColor, gradientColor, dimensions]);
+  }, [density, size, intensity, speed, mouseInteractive, dimensions, getColor]);
 
   // Main render loop
   const render = useCallback(() => {
@@ -630,12 +631,16 @@ export function PatternCanvas({
 
     if (isAnimated) {
       timeRef.current += 16; // ~60fps
-      animationRef.current = requestAnimationFrame(render);
+      animationRef.current = requestAnimationFrame(renderRef.current);
     }
   }, [
     patternType, backgroundColor, dimensions, 
     drawDots, drawWaves, drawSpiral, drawNoise, drawGrid, isAnimated
   ]);
+
+  useEffect(() => {
+    renderRef.current = render;
+  }, [render]);
 
   // Start/stop animation
   useEffect(() => {
