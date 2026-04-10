@@ -563,8 +563,8 @@ export default function LibraryCosmosSection({
                 speed={HALFTONE_SPEED}
                 colorMode="mono"
                 backgroundColor="#fafafa"
-                foregroundColor="#a8b8a0"
-                gradientColor="#a8b8a0"
+                foregroundColor="#9cb8b4"
+                gradientColor="#9cb8b4"
                 isAnimated={true}
                 mouseInteractive={true}
                 morphing={false}

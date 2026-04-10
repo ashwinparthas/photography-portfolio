@@ -410,11 +410,11 @@ export default function Home() {
       const elapsed = performance.now() - loaderStartTime;
       const minimumLoaderTimeMs = isMobileLoader
         ? isWarmSession
-          ? 700
-          : 1000
+          ? 900
+          : 1200
         : isWarmSession
-          ? 800
-          : 1200;
+          ? 1000
+          : 1400;
       const artifactTimeoutMs = isMobileLoader
         ? isWarmSession
           ? 2500
@@ -442,8 +442,8 @@ export default function Home() {
       }
 
       const completionFrom = loaderProgressRef.current;
-      const completionDurationMs = isWarmSession ? 180 : 280;
-      const exitDelayMs = isWarmSession ? 80 : 120;
+      const completionDurationMs = isWarmSession ? 80 : 120;
+      const exitDelayMs = isWarmSession ? 420 : 520;
       const completionStart = performance.now();
       const completeProgress = (now: number) => {
         if (cancelled) return;
@@ -859,21 +859,28 @@ export default function Home() {
 
       {showInitialLoader ? (
         <div
-          className={`home-loading-screen${
-            isLoaderExiting ? " is-exiting" : ""
-          }`}
+          className={`home-preloader${isLoaderExiting ? " is-exiting" : ""}`}
           role="status"
           aria-live="polite"
           aria-label="Loading homepage"
         >
-          <div className="home-loading-panel">
-            <p className="home-loading-label">Loading</p>
-            <div className="home-loading-bar" aria-hidden="true">
-              <div
-                ref={loaderFillRef}
-                className="home-loading-bar-fill"
-              />
-            </div>
+          <div className="home-preloader-content">
+            <motion.span
+              className="home-preloader-line"
+              initial={{ opacity: 0, y: 32 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.7, ease: EASE_EDITORIAL, delay: 0.15 }}
+            >
+              Ashwin
+            </motion.span>
+            <motion.span
+              className="home-preloader-line"
+              initial={{ opacity: 0, y: 32 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.7, ease: EASE_EDITORIAL, delay: 0.35 }}
+            >
+              Parthasarathy
+            </motion.span>
           </div>
         </div>
       ) : null}
